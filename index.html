@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <style>
         body { background-color: #f3f4f6; font-family: sans-serif; }
@@ -28,6 +27,7 @@
     <header class="bg-blue-900 text-white sticky top-0 z-50 shadow-md">
         <div class="p-4 pb-2">
             <h1 class="text-xl font-bold text-center mb-3">Mi Álbum Panini</h1>
+            
             <div class="relative flex gap-2">
                 <div class="relative flex-1">
                     <span class="absolute inset-y-0 left-0 flex items-center pl-3">
@@ -43,6 +43,7 @@
                 </button>
             </div>
         </div>
+
         <div class="bg-blue-800 px-2 py-2.5 border-t border-blue-700">
             <div id="groupFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x"></div>
         </div>
@@ -89,11 +90,9 @@
         <div id="cameraArea" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden cursor-crosshair">
             <video id="cameraFeed" autoplay playsinline class="object-cover w-full h-full"></video>
             
-            <canvas id="previewCanvas" class="absolute top-20 right-4 w-24 h-32 border-2 border-green-500 hidden z-30 bg-white object-contain"></canvas>
-
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div class="w-64 h-80 border-2 border-yellow-400/50 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center">
-                    <span class="text-yellow-400/50 text-xs mt-2 font-bold bg-black/30 px-2 rounded">Área de Lectura</span>
+                    <span class="text-yellow-400/50 text-xs mt-2 font-bold bg-black/30 px-2 rounded">Apunta al texto</span>
                 </div>
             </div>
             <div id="focusRing" class="absolute hidden w-16 h-16 border-2 border-yellow-400 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 z-10"></div>
@@ -106,7 +105,7 @@
                 <i class="fa-solid fa-magnifying-glass-plus text-gray-400 text-sm"></i>
             </div>
 
-            <p id="scanStatus" class="text-blue-300 mb-4 text-sm font-medium h-5 text-center">Enfoca el texto y captura</p>
+            <p id="scanStatus" class="text-blue-300 mb-4 text-sm font-medium h-5 text-center">Motor nativo activado</p>
             <button id="captureBtn" onclick="captureAndScan()" class="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center border-4 border-white shadow-lg active:scale-95 transition-transform">
                 <i class="fa-solid fa-camera text-white text-xl"></i>
             </button>
@@ -139,7 +138,6 @@
         const focusRing = document.getElementById('focusRing');
         const zoomContainer = document.getElementById('zoomContainer');
         const zoomSlider = document.getElementById('zoomSlider');
-        const previewCanvas = document.getElementById('previewCanvas');
         
         let mediaStream = null;
         let isFlashOn = false;
@@ -177,6 +175,7 @@
                                 codigo: row['Código'],
                                 pais: row['Categoría / Pais'],
                                 descripcion: row['Descripción'],
+                                // Logica actualizada: Checked significa que SI está disponible en inventario
                                 enInventario: row['En Inventario'] === 'TRUE' || row['En Inventario'] === 'True' || false,
                                 repetidas: parseInt(row['Repetidas']) || 0,
                                 grupo: row['Grupos'] || 'Otros'
@@ -299,7 +298,6 @@
         }
 
         window.toggleInventario = function(index) {
-            // El estado enInventario = true significa que el producto ESTÁ disponible
             albumData[index].enInventario = !albumData[index].enInventario;
             if (!albumData[index].enInventario) albumData[index].repetidas = 0;
             saveData(); filterCards(); 
@@ -313,11 +311,10 @@
             saveData(); filterCards();
         };
 
-        // --- 📸 FUNCIONES DE CÁMARA PRINCIPAL FORZADA Y PROCESAMIENTO ---
+        // --- 📸 SISTEMA ESTRICTO DE CÁMARA PRINCIPAL ---
         async function openScanner() {
             scannerModal.classList.remove('hidden');
-            previewCanvas.classList.add('hidden');
-            scanStatus.innerText = "Buscando cámara principal...";
+            scanStatus.innerText = "Seleccionando cámara principal...";
             scanStatus.className = "text-blue-300 mb-4 text-sm font-medium h-5";
             captureBtn.disabled = true;
             captureBtn.classList.add('opacity-50');
@@ -326,14 +323,11 @@
             zoomContainer.classList.add('hidden');
 
             try {
-                // 1. Pedir permiso rápido para desbloquear las etiquetas de las cámaras
+                // Desbloquear permisos
                 let tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                
-                // 2. Leer todas las cámaras disponibles en el equipo
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const videoDevices = devices.filter(device => device.kind === 'videoinput');
                 
-                // 3. Identificar cámaras traseras
                 const backCameras = videoDevices.filter(device => {
                     const label = device.label.toLowerCase();
                     return label.includes('back') || label.includes('trasera') || label.includes('environment');
@@ -342,35 +336,34 @@
                 let mainCameraId = null;
 
                 if (backCameras.length > 0) {
-                    // Filtrar y eliminar las cámaras panorámicas, ultrawide, teleobjetivo o infrarrojas
+                    // FILTRO DE RECHAZO ESTRICTO: Bloquear cámaras panorámicas/ultrawide/teleobjetivo
                     const standardCameras = backCameras.filter(device => {
                         const label = device.label.toLowerCase();
                         return !label.includes('ultrawide') && 
                                !label.includes('ultra wide') && 
-                               !label.includes('ultra-wide') && 
-                               !label.includes('telephoto') &&
+                               !label.includes('0.5') && 
+                               !label.includes('tele') &&
+                               !label.includes('macro') &&
                                !label.includes('depth');
                     });
                     
-                    // Elegir la cámara estándar principal si se encontró, sino hacer fallback a la primera trasera
                     mainCameraId = standardCameras.length > 0 ? standardCameras[0].deviceId : backCameras[0].deviceId;
                 }
 
-                // Apagar el stream temporal
                 tempStream.getTracks().forEach(track => track.stop());
 
-                // 4. Iniciar el video forzando la ID de la cámara principal exacta y en Full HD
                 const constraints = {
                     video: {
                         width: { ideal: 1920 },
-                        height: { ideal: 1080 }
+                        height: { ideal: 1080 },
+                        advanced: [{ zoom: 1.0 }] // Forzar zoom base para evitar teleobjetivos nativos
                     }
                 };
 
                 if (mainCameraId) {
                     constraints.video.deviceId = { exact: mainCameraId };
                 } else {
-                    constraints.video.facingMode = 'environment'; // Fallback por si acaso
+                    constraints.video.facingMode = 'environment';
                 }
 
                 mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -379,9 +372,8 @@
 
                 captureBtn.disabled = false;
                 captureBtn.classList.remove('opacity-50');
-                scanStatus.innerText = "Aleja la cámara y usa el zoom";
+                scanStatus.innerText = "Motor nativo listo para escanear";
 
-                // Iniciar controles de zoom si es soportado
                 setTimeout(() => {
                     const capabilities = videoTrack.getCapabilities();
                     if (capabilities.zoom) {
@@ -398,7 +390,7 @@
 
             } catch (err) {
                 console.error(err);
-                scanStatus.innerText = "Error: No se pudo acceder a la cámara principal.";
+                scanStatus.innerText = "Error al acceder a la cámara.";
                 scanStatus.className = "text-red-400 mb-4 text-sm font-bold h-5";
             }
         }
@@ -423,7 +415,7 @@
                     flashIcon.className = isFlashOn ? "fa-solid fa-bolt text-yellow-400" : "fa-solid fa-bolt-slash";
                 } catch (err) {}
             } else {
-                showToast("Flash no compatible.", false);
+                showToast("Flash no compatible en este navegador.", false);
             }
         }
 
@@ -443,55 +435,46 @@
             }
         });
 
+        // --- 🤖 NATIVE TEXT DETECTOR API (SIN TESSERACT) ---
         async function captureAndScan() {
             if (!mediaStream) return;
+            
+            // Verificar soporte de la API nativa
+            if (!('TextDetector' in window)) {
+                scanStatus.innerText = "Tu navegador no soporta escaneo nativo (Usa Chrome en Android).";
+                scanStatus.className = "text-red-400 mb-4 text-sm font-bold h-5";
+                showToast("Requiere Google Chrome en Android para escanear sin Tesseract.", false, 4000);
+                setTimeout(closeScanner, 4000);
+                return;
+            }
+
             captureBtn.disabled = true;
             captureBtn.classList.add('opacity-50');
-            scanStatus.innerText = "Aplicando filtro de alto contraste...";
+            scanStatus.innerText = "Leyendo texto con hardware del celular...";
             scanStatus.className = "text-yellow-400 mb-4 text-sm font-bold h-5 animate-pulse";
 
-            const videoW = cameraFeed.videoWidth;
-            const videoH = cameraFeed.videoHeight;
-            
-            const cropW = videoW * 0.5; 
-            const cropH = videoH * 0.4;
-            const cropX = (videoW - cropW) / 2;
-            const cropY = (videoH - cropH) / 2;
-
-            const canvas = document.createElement('canvas');
-            canvas.width = cropW;
-            canvas.height = cropH;
-            const ctx = canvas.getContext('2d');
-            
-            ctx.drawImage(cameraFeed, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-
-            let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            let pixels = imgData.data;
-            for (let i = 0; i < pixels.length; i += 4) {
-                let lightness = (pixels[i] * 0.3) + (pixels[i+1] * 0.59) + (pixels[i+2] * 0.11);
-                let color = lightness > 110 ? 255 : 0; 
-                pixels[i] = color;     
-                pixels[i+1] = color;   
-                pixels[i+2] = color;   
-            }
-            ctx.putImageData(imgData, 0, 0);
-
-            previewCanvas.width = canvas.width;
-            previewCanvas.height = canvas.height;
-            previewCanvas.getContext('2d').putImageData(imgData, 0, 0);
-            previewCanvas.classList.remove('hidden');
-
-            scanStatus.innerText = "Analizando texto limpio...";
-
             try {
-                const result = await Tesseract.recognize(canvas, 'spa');
-                const recognizedText = quitarAcentos(result.data.text);
+                // Al usar la API Nativa, le pasamos directamente el flujo de video al detector
+                const textDetector = new TextDetector();
+                const detectedTexts = await textDetector.detect(cameraFeed);
+                
+                // Combinar todo el texto encontrado en un solo string
+                let fullText = detectedTexts.map(item => item.rawValue).join(' ');
+                
+                if (!fullText.trim()) {
+                    throw new Error("No se detectó ningún texto claro.");
+                }
+
+                const recognizedText = quitarAcentos(fullText);
                 procesarTexto(recognizedText);
+
             } catch (error) {
-                scanStatus.innerText = "Error al analizar.";
+                scanStatus.innerText = error.message || "Error al analizar.";
                 scanStatus.className = "text-red-400 mb-4 text-sm font-bold h-5";
+                showToast("No se encontró texto. Intenta de nuevo.", false);
             }
-            setTimeout(() => { closeScanner(); previewCanvas.classList.add('hidden'); }, 3000);
+            
+            setTimeout(closeScanner, 2500);
         }
 
         function procesarTexto(textoIngresado) {
@@ -532,10 +515,9 @@
 
             if (!encontrado) {
                 if(scannerModal.classList.contains('hidden') === false){
-                    scanStatus.innerText = "No se reconoció (Revisa la vista previa).";
+                    scanStatus.innerText = "No se reconoció ninguna figurita.";
                     scanStatus.className = "text-orange-400 mb-4 text-sm font-bold h-5";
                 }
-                showToast("No se encontró coincidencia exacta.", false);
             }
         }
 
