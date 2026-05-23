@@ -317,13 +317,19 @@
             flashIcon.className = "fa-solid fa-bolt-slash";
 
             try {
+                // Pedimos explícitamente alta resolución (1080p)
                 mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment', advanced: [{ focusMode: "continuous" }] } 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        advanced: [{ focusMode: "continuous" }] 
+                    } 
                 });
                 cameraFeed.srcObject = mediaStream;
             } catch (err) {
                 console.error(err);
-                scanStatus.innerText = "Permiso de cámara denegado.";
+                scanStatus.innerText = "Permiso de cámara denegado o error de hardware.";
                 scanStatus.className = "text-red-400 mb-4 text-sm font-bold h-5";
             }
         }
