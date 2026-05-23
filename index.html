@@ -10,11 +10,10 @@
     
     <style>
         body { background-color: #f3f4f6; font-family: sans-serif; }
-        /* Ocultar barra de desplazamiento general */
+        /* Ocultar barras de scroll visualmente en selectores móviles */
         ::-webkit-scrollbar { width: 6px; height: 4px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         
-        /* Ocultar barra de desplazamiento específica para los filtros horizontales */
         .hide-scrollbar::-webkit-scrollbar {
             display: none;
         }
@@ -35,13 +34,18 @@
                     <i class="fa-solid fa-search text-gray-400"></i>
                 </span>
                 <input type="text" id="searchInput" 
-                    class="w-full py-2 pl-10 pr-4 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                    placeholder="Buscar por jugador (Ej: Messi) o código...">
+                    class="w-full py-2 py-1.5 pl-10 pr-4 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
+                    placeholder="Buscar por jugador, país o código...">
             </div>
         </div>
 
-        <div class="bg-blue-800 px-2 py-3 border-t border-blue-700">
+        <div class="bg-blue-800 px-2 py-2.5 border-t border-blue-700">
             <div id="groupFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x">
+                </div>
+        </div>
+
+        <div id="countryFiltersContainer" class="bg-slate-800 px-2 py-2 border-t border-slate-700 hidden">
+            <div id="countryFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x">
                 </div>
         </div>
     </header>
@@ -69,22 +73,29 @@
     <script>
         const STORAGE_KEY = 'panini_album_data';
         let albumData = [];
+        
+        // Estados de filtrado numérico/textual
         let uniqueGroups = [];
+        let uniqueCountries = [];
         let currentGroupFilter = 'Todos';
+        let currentCountryFilter = 'Todos';
 
+        // Elementos del DOM
         const loadingSection = document.getElementById('loadingSection');
         const statsSection = document.getElementById('statsSection');
         const cardsContainer = document.getElementById('cardsContainer');
         const searchInput = document.getElementById('searchInput');
         const groupFiltersContainer = document.getElementById('groupFilters');
+        const countryFiltersWrapper = document.getElementById('countryFiltersContainer');
+        const countryFiltersContainer = document.getElementById('countryFilters');
 
-        // Función para eliminar acentos de un texto
+        // Normalizador para ignorar acentos y tildes
         function quitarAcentos(texto) {
             if (!texto) return '';
             return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         }
 
-        // Inicializar aplicación
+        // Inicializar Aplicación cargando data.csv automáticamente
         async function init() {
             const storedData = localStorage.getItem(STORAGE_KEY);
             
@@ -95,7 +106,7 @@
             } else {
                 try {
                     const response = await fetch('data.csv');
-                    if (!response.ok) throw new Error('No se pudo encontrar el archivo data.csv');
+                    if (!response.ok) throw new Error('No se encontró el archivo data.csv');
                     const csvText = await response.text();
                     
                     Papa.parse(csvText, {
@@ -108,7 +119,7 @@
                                 descripcion: row['Descripción'],
                                 enInventario: row['En Inventario'] === 'TRUE' || row['En Inventario'] === 'True' || false,
                                 repetidas: parseInt(row['Repetidas']) || 0,
-                                grupo: row['Grupos'] || 'Otros' // Por si algún campo viene vacío
+                                grupo: row['Grupos'] || 'Otros'
                             }));
 
                             extractGroups();
@@ -119,18 +130,34 @@
                 } catch (error) {
                     loadingSection.innerHTML = `
                         <i class="fa-solid fa-triangle-exclamation text-4xl text-red-500 mb-3"></i>
-                        <p class="text-red-600 font-bold">Error al cargar data.csv</p>
-                        <p class="text-sm text-gray-600 mt-2">Asegúrate de que estás usando un servidor local (Live Server) y que el archivo se llama exactamente "data.csv".</p>
+                        <p class="text-red-600 font-bold">Error al leer data.csv</p>
+                        <p class="text-sm text-gray-600 mt-2">Recuerda correr la app usando un servidor local (Live Server en VSCode) para permitir la lectura del archivo.</p>
                     `;
                     console.error(error);
                 }
             }
         }
 
-        // Extraer los grupos únicos para la barra de navegación
+        // Extraer los Grupos Únicos del CSV
         function extractGroups() {
             const gruposSet = new Set(albumData.map(item => item.grupo));
             uniqueGroups = ['Todos', ...Array.from(gruposSet).filter(g => g)];
+        }
+
+        // Actualizar la lista de Países basándose en el Grupo seleccionado
+        function updateCountryFiltersList() {
+            let filteredItems = albumData;
+            if (currentGroupFilter !== 'Todos') {
+                filteredItems = albumData.filter(item => item.grupo === currentGroupFilter);
+            }
+            
+            const paisesSet = new Set(filteredItems.map(item => item.pais));
+            uniqueCountries = ['Todos', ...Array.from(paisesSet).filter(p => p)];
+
+            // Si el país seleccionado ya no pertenece al nuevo grupo, vuelve a 'Todos'
+            if (!uniqueCountries.includes(currentCountryFilter)) {
+                currentCountryFilter = 'Todos';
+            }
         }
 
         function showApp() {
@@ -138,19 +165,19 @@
             statsSection.classList.remove('hidden');
             statsSection.classList.add('grid');
             renderGroupFilters();
+            updateCountryFiltersList();
+            renderCountryFilters();
             filterCards();
             updateStats();
         }
 
-        // Renderizar los botones de grupos (píldoras)
+        // Renderizar Nivel 1: Grupos
         function renderGroupFilters() {
             groupFiltersContainer.innerHTML = '';
-            
             uniqueGroups.forEach(grupo => {
                 const btn = document.createElement('button');
                 const isSelected = currentGroupFilter === grupo;
                 
-                // Clases del botón. Azul claro si está seleccionado, transparente si no.
                 btn.className = `snap-start whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors border-2 ${
                     isSelected 
                     ? 'bg-blue-100 text-blue-900 border-blue-200 shadow-sm' 
@@ -160,35 +187,71 @@
                 
                 btn.onclick = () => {
                     currentGroupFilter = grupo;
-                    renderGroupFilters(); // Re-renderizar para actualizar el color seleccionado
-                    filterCards();        // Filtrar las tarjetas
+                    currentCountryFilter = 'Todos'; // Resetear sub-filtro al cambiar de categoría
+                    renderGroupFilters();
+                    updateCountryFiltersList();
+                    renderCountryFilters();
+                    filterCards();
                 };
-                
                 groupFiltersContainer.appendChild(btn);
             });
         }
 
-        // Función centralizada para filtrar por búsqueda Y grupo
+        // Renderizar Nivel 2: Países de la categoría seleccionada
+        function renderCountryFilters() {
+            countryFiltersContainer.innerHTML = '';
+            
+            // Ocultar la barra secundaria si estamos en 'Todos' y no hay un grupo específico
+            if (currentGroupFilter === 'Todos' || uniqueCountries.length <= 2) {
+                countryFiltersWrapper.classList.add('hidden');
+                return;
+            }
+            
+            countryFiltersWrapper.classList.remove('hidden');
+            
+            uniqueCountries.forEach(pais => {
+                const btn = document.createElement('button');
+                const isSelected = currentCountryFilter === pais;
+                
+                btn.className = `snap-start whitespace-nowrap px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${
+                    isSelected 
+                    ? 'bg-orange-500 text-white border-orange-400 shadow-sm' 
+                    : 'bg-transparent text-slate-300 border-transparent hover:bg-slate-700'
+                }`;
+                btn.innerText = pais;
+                
+                btn.onclick = () => {
+                    currentCountryFilter = pais;
+                    renderCountryFilters();
+                    filterCards();
+                };
+                countryFiltersContainer.appendChild(btn);
+            });
+        }
+
+        // Filtro maestro combinado (Buscador + Grupo + País)
         function filterCards() {
             const term = quitarAcentos(searchInput.value.toLowerCase());
             
             const filtered = albumData.filter(card => {
-                // Filtro de Búsqueda
+                // 1. Filtrado por términos de búsqueda (Sin acentos)
                 const desc = quitarAcentos(card.descripcion ? card.descripcion.toLowerCase() : '');
                 const cod = quitarAcentos(card.codigo ? card.codigo.toLowerCase() : '');
-                const pais = quitarAcentos(card.pais ? card.pais.toLowerCase() : '');
-                const matchesSearch = desc.includes(term) || cod.includes(term) || pais.includes(term);
+                const paisText = quitarAcentos(card.pais ? card.pais.toLowerCase() : '');
+                const matchesSearch = desc.includes(term) || cod.includes(term) || paisText.includes(term);
                 
-                // Filtro de Grupo
+                // 2. Filtrado por Grupo
                 const matchesGroup = currentGroupFilter === 'Todos' || card.grupo === currentGroupFilter;
+                
+                // 3. Filtrado por País
+                const matchesCountry = currentCountryFilter === 'Todos' || card.pais === currentCountryFilter;
 
-                return matchesSearch && matchesGroup;
+                return matchesSearch && matchesGroup && matchesCountry;
             });
             
             renderCards(filtered);
         }
 
-        // Escuchar cambios en el buscador
         searchInput.addEventListener('input', filterCards);
 
         function saveData() {
@@ -203,10 +266,11 @@
             document.getElementById('duplicatesCount').innerText = repetidas;
         }
 
+        // Renderizado optimizado de tarjetas
         function renderCards(dataToRender) {
             cardsContainer.innerHTML = '';
             
-            // Límite de seguridad visual para celulares
+            // Límite de procesamiento visual para móviles
             const displayData = dataToRender.slice(0, 100); 
 
             displayData.forEach((card) => {
@@ -219,13 +283,13 @@
                     <div class="flex-1 cursor-pointer" onclick="toggleInventario(${realIndex})">
                         <div class="flex items-center gap-2">
                             <span class="font-bold text-lg ${card.enInventario ? 'text-blue-700' : 'text-gray-700'}">${card.codigo}</span>
-                            <span class="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded-full">${card.pais}</span>
+                            <span class="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded-full font-semibold">${card.pais}</span>
                         </div>
                         <p class="text-sm text-gray-600 mt-1 font-medium">${card.descripcion}</p>
                     </div>
                     
                     <div class="flex items-center gap-3 ml-2">
-                        <button onclick="toggleInventario(${realIndex})" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors ${card.enInventario ? 'bg-blue-500 text-white shadow-inner' : 'bg-gray-200 text-gray-400'}">
+                        <button onclick="toggleInventario(${realIndex})" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors ${card.enInventario ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-400'}">
                             <i class="fa-solid fa-check"></i>
                         </button>
                         
@@ -244,19 +308,17 @@
             });
 
             if (dataToRender.length === 0) {
-                cardsContainer.innerHTML = `<p class="text-center text-gray-500 py-6">No se encontraron resultados para "${currentGroupFilter}".</p>`;
+                cardsContainer.innerHTML = `<p class="text-center text-gray-500 py-8 text-sm">No hay figuritas que coincidan con la selección.</p>`;
             } else if (dataToRender.length > 100) {
                 const notice = document.createElement('p');
                 notice.className = 'text-center text-xs text-gray-400 mt-4';
-                notice.innerText = `Se muestran 100 de ${dataToRender.length} resultados. Usa el buscador para filtrar más.`;
+                notice.innerText = `Mostrando 100 de ${dataToRender.length} resultados. Refina con el buscador o sub-categorías.`;
                 cardsContainer.appendChild(notice);
             }
         }
 
         window.toggleInventario = function(index) {
             albumData[index].enInventario = !albumData[index].enInventario;
-            
-            // Si deja de estar disponible, vaciamos las repetidas
             if (!albumData[index].enInventario) {
                 albumData[index].repetidas = 0;
             }
@@ -268,7 +330,6 @@
             let newVal = albumData[index].repetidas + change;
             if (newVal < 0) newVal = 0;
             
-            // Si se suman repetidas, se marca automáticamente como disponible
             if (newVal > 0 && !albumData[index].enInventario) {
                 albumData[index].enInventario = true;
             }
