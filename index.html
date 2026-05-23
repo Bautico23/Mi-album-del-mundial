@@ -7,20 +7,14 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <style>
         body { background-color: #f3f4f6; font-family: sans-serif; }
-        /* Ocultar barras de scroll visualmente en selectores móviles */
         ::-webkit-scrollbar { width: 6px; height: 4px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        
-        .hide-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .hide-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="text-gray-800 pb-20">
@@ -29,24 +23,26 @@
         <div class="p-4 pb-2">
             <h1 class="text-xl font-bold text-center mb-3">Mi Álbum Panini</h1>
             
-            <div class="relative">
-                <span class="absolute inset-y-0 left-0 flex items-center pl-3">
-                    <i class="fa-solid fa-search text-gray-400"></i>
-                </span>
-                <input type="text" id="searchInput" 
-                    class="w-full py-2 py-1.5 pl-10 pr-4 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
-                    placeholder="Buscar por jugador, país o código...">
+            <div class="relative flex gap-2">
+                <div class="relative flex-1">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+                        <i class="fa-solid fa-search text-gray-400"></i>
+                    </span>
+                    <input type="text" id="searchInput" 
+                        class="w-full py-2 pl-10 pr-4 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
+                        placeholder="Buscar por jugador, país o código...">
+                </div>
+                <button onclick="openScanner()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-lg shadow transition-colors flex items-center justify-center">
+                    <i class="fa-solid fa-camera"></i>
+                </button>
             </div>
         </div>
 
         <div class="bg-blue-800 px-2 py-2.5 border-t border-blue-700">
-            <div id="groupFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x">
-                </div>
+            <div id="groupFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x"></div>
         </div>
-
         <div id="countryFiltersContainer" class="bg-slate-800 px-2 py-2 border-t border-slate-700 hidden">
-            <div id="countryFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x">
-                </div>
+            <div id="countryFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x"></div>
         </div>
     </header>
 
@@ -67,20 +63,43 @@
             </div>
         </div>
 
+        <div id="toastNotification" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 text-sm font-medium">
+            Notificación
+        </div>
+
         <div id="cardsContainer" class="grid gap-3"></div>
     </main>
+
+    <div id="scannerModal" class="fixed inset-0 bg-black z-[100] hidden flex flex-col">
+        <div class="p-4 flex justify-between items-center text-white bg-black/50 absolute top-0 w-full z-10">
+            <h2 class="text-lg font-bold">Escanear Figurita</h2>
+            <button onclick="closeScanner()" class="text-white text-2xl"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+            <video id="cameraFeed" autoplay playsinline class="object-cover w-full h-full"></video>
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div class="w-64 h-80 border-4 border-dashed border-white/70 rounded-lg"></div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 p-6 flex flex-col items-center">
+            <p id="scanStatus" class="text-blue-300 mb-4 text-sm font-medium h-5">Apunta al nombre o código de la figurita</p>
+            <button id="captureBtn" onclick="captureAndScan()" class="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center border-4 border-white shadow-lg active:scale-95 transition-transform">
+                <i class="fa-solid fa-camera text-white text-xl"></i>
+            </button>
+        </div>
+    </div>
 
     <script>
         const STORAGE_KEY = 'panini_album_data';
         let albumData = [];
-        
-        // Estados de filtrado numérico/textual
         let uniqueGroups = [];
         let uniqueCountries = [];
         let currentGroupFilter = 'Todos';
         let currentCountryFilter = 'Todos';
 
-        // Elementos del DOM
+        // Elementos DOM
         const loadingSection = document.getElementById('loadingSection');
         const statsSection = document.getElementById('statsSection');
         const cardsContainer = document.getElementById('cardsContainer');
@@ -88,17 +107,29 @@
         const groupFiltersContainer = document.getElementById('groupFilters');
         const countryFiltersWrapper = document.getElementById('countryFiltersContainer');
         const countryFiltersContainer = document.getElementById('countryFilters');
+        const toastNotification = document.getElementById('toastNotification');
 
-        // Normalizador para ignorar acentos y tildes
+        // Escáner DOM
+        const scannerModal = document.getElementById('scannerModal');
+        const cameraFeed = document.getElementById('cameraFeed');
+        const scanStatus = document.getElementById('scanStatus');
+        const captureBtn = document.getElementById('captureBtn');
+        let mediaStream = null;
+
         function quitarAcentos(texto) {
             if (!texto) return '';
-            return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
         }
 
-        // Inicializar Aplicación cargando data.csv automáticamente
+        function showToast(message, isSuccess = true) {
+            toastNotification.innerText = message;
+            toastNotification.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 z-50 text-sm font-medium ${isSuccess ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`;
+            toastNotification.style.opacity = '1';
+            setTimeout(() => { toastNotification.style.opacity = '0'; }, 3000);
+        }
+
         async function init() {
             const storedData = localStorage.getItem(STORAGE_KEY);
-            
             if (storedData) {
                 albumData = JSON.parse(storedData);
                 extractGroups();
@@ -106,7 +137,7 @@
             } else {
                 try {
                     const response = await fetch('data.csv');
-                    if (!response.ok) throw new Error('No se encontró el archivo data.csv');
+                    if (!response.ok) throw new Error('No data.csv');
                     const csvText = await response.text();
                     
                     Papa.parse(csvText, {
@@ -121,43 +152,27 @@
                                 repetidas: parseInt(row['Repetidas']) || 0,
                                 grupo: row['Grupos'] || 'Otros'
                             }));
-
                             extractGroups();
                             saveData();
                             showApp();
                         }
                     });
                 } catch (error) {
-                    loadingSection.innerHTML = `
-                        <i class="fa-solid fa-triangle-exclamation text-4xl text-red-500 mb-3"></i>
-                        <p class="text-red-600 font-bold">Error al leer data.csv</p>
-                        <p class="text-sm text-gray-600 mt-2">Recuerda correr la app usando un servidor local (Live Server en VSCode) para permitir la lectura del archivo.</p>
-                    `;
-                    console.error(error);
+                    loadingSection.innerHTML = `<p class="text-red-600 font-bold">Error al leer data.csv</p>`;
                 }
             }
         }
 
-        // Extraer los Grupos Únicos del CSV
         function extractGroups() {
             const gruposSet = new Set(albumData.map(item => item.grupo));
             uniqueGroups = ['Todos', ...Array.from(gruposSet).filter(g => g)];
         }
 
-        // Actualizar la lista de Países basándose en el Grupo seleccionado
         function updateCountryFiltersList() {
-            let filteredItems = albumData;
-            if (currentGroupFilter !== 'Todos') {
-                filteredItems = albumData.filter(item => item.grupo === currentGroupFilter);
-            }
-            
+            let filteredItems = currentGroupFilter !== 'Todos' ? albumData.filter(item => item.grupo === currentGroupFilter) : albumData;
             const paisesSet = new Set(filteredItems.map(item => item.pais));
             uniqueCountries = ['Todos', ...Array.from(paisesSet).filter(p => p)];
-
-            // Si el país seleccionado ya no pertenece al nuevo grupo, vuelve a 'Todos'
-            if (!uniqueCountries.includes(currentCountryFilter)) {
-                currentCountryFilter = 'Todos';
-            }
+            if (!uniqueCountries.includes(currentCountryFilter)) currentCountryFilter = 'Todos';
         }
 
         function showApp() {
@@ -171,93 +186,47 @@
             updateStats();
         }
 
-        // Renderizar Nivel 1: Grupos
         function renderGroupFilters() {
             groupFiltersContainer.innerHTML = '';
             uniqueGroups.forEach(grupo => {
                 const btn = document.createElement('button');
-                const isSelected = currentGroupFilter === grupo;
-                
-                btn.className = `snap-start whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors border-2 ${
-                    isSelected 
-                    ? 'bg-blue-100 text-blue-900 border-blue-200 shadow-sm' 
-                    : 'bg-transparent text-blue-100 border-transparent hover:bg-blue-700'
-                }`;
+                btn.className = `snap-start whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors border-2 ${currentGroupFilter === grupo ? 'bg-blue-100 text-blue-900 border-blue-200 shadow-sm' : 'bg-transparent text-blue-100 border-transparent hover:bg-blue-700'}`;
                 btn.innerText = grupo;
-                
-                btn.onclick = () => {
-                    currentGroupFilter = grupo;
-                    currentCountryFilter = 'Todos'; // Resetear sub-filtro al cambiar de categoría
-                    renderGroupFilters();
-                    updateCountryFiltersList();
-                    renderCountryFilters();
-                    filterCards();
-                };
+                btn.onclick = () => { currentGroupFilter = grupo; currentCountryFilter = 'Todos'; renderGroupFilters(); updateCountryFiltersList(); renderCountryFilters(); filterCards(); };
                 groupFiltersContainer.appendChild(btn);
             });
         }
 
-        // Renderizar Nivel 2: Países de la categoría seleccionada
         function renderCountryFilters() {
             countryFiltersContainer.innerHTML = '';
-            
-            // Ocultar la barra secundaria si estamos en 'Todos' y no hay un grupo específico
-            if (currentGroupFilter === 'Todos' || uniqueCountries.length <= 2) {
-                countryFiltersWrapper.classList.add('hidden');
-                return;
-            }
-            
+            if (currentGroupFilter === 'Todos' || uniqueCountries.length <= 2) { countryFiltersWrapper.classList.add('hidden'); return; }
             countryFiltersWrapper.classList.remove('hidden');
-            
             uniqueCountries.forEach(pais => {
                 const btn = document.createElement('button');
-                const isSelected = currentCountryFilter === pais;
-                
-                btn.className = `snap-start whitespace-nowrap px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${
-                    isSelected 
-                    ? 'bg-orange-500 text-white border-orange-400 shadow-sm' 
-                    : 'bg-transparent text-slate-300 border-transparent hover:bg-slate-700'
-                }`;
+                btn.className = `snap-start whitespace-nowrap px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${currentCountryFilter === pais ? 'bg-orange-500 text-white border-orange-400 shadow-sm' : 'bg-transparent text-slate-300 border-transparent hover:bg-slate-700'}`;
                 btn.innerText = pais;
-                
-                btn.onclick = () => {
-                    currentCountryFilter = pais;
-                    renderCountryFilters();
-                    filterCards();
-                };
+                btn.onclick = () => { currentCountryFilter = pais; renderCountryFilters(); filterCards(); };
                 countryFiltersContainer.appendChild(btn);
             });
         }
 
-        // Filtro maestro combinado (Buscador + Grupo + País)
         function filterCards() {
-            const term = quitarAcentos(searchInput.value.toLowerCase());
-            
+            const term = quitarAcentos(searchInput.value);
             const filtered = albumData.filter(card => {
-                // 1. Filtrado por términos de búsqueda (Sin acentos)
-                const desc = quitarAcentos(card.descripcion ? card.descripcion.toLowerCase() : '');
-                const cod = quitarAcentos(card.codigo ? card.codigo.toLowerCase() : '');
-                const paisText = quitarAcentos(card.pais ? card.pais.toLowerCase() : '');
+                const desc = quitarAcentos(card.descripcion);
+                const cod = quitarAcentos(card.codigo);
+                const paisText = quitarAcentos(card.pais);
                 const matchesSearch = desc.includes(term) || cod.includes(term) || paisText.includes(term);
-                
-                // 2. Filtrado por Grupo
                 const matchesGroup = currentGroupFilter === 'Todos' || card.grupo === currentGroupFilter;
-                
-                // 3. Filtrado por País
                 const matchesCountry = currentCountryFilter === 'Todos' || card.pais === currentCountryFilter;
-
                 return matchesSearch && matchesGroup && matchesCountry;
             });
-            
             renderCards(filtered);
         }
 
         searchInput.addEventListener('input', filterCards);
 
-        function saveData() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(albumData));
-            updateStats();
-        }
+        function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(albumData)); updateStats(); }
 
         function updateStats() {
             const conseguidas = albumData.filter(c => c.enInventario).length;
@@ -266,19 +235,13 @@
             document.getElementById('duplicatesCount').innerText = repetidas;
         }
 
-        // Renderizado optimizado de tarjetas
         function renderCards(dataToRender) {
             cardsContainer.innerHTML = '';
-            
-            // Límite de procesamiento visual para móviles
             const displayData = dataToRender.slice(0, 100); 
-
             displayData.forEach((card) => {
                 const realIndex = albumData.findIndex(c => c.codigo === card.codigo);
-
                 const cardEl = document.createElement('div');
                 cardEl.className = `p-4 rounded-lg border-2 shadow-sm flex items-center justify-between transition-colors ${card.enInventario ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200'}`;
-                
                 cardEl.innerHTML = `
                     <div class="flex-1 cursor-pointer" onclick="toggleInventario(${realIndex})">
                         <div class="flex items-center gap-2">
@@ -287,12 +250,10 @@
                         </div>
                         <p class="text-sm text-gray-600 mt-1 font-medium">${card.descripcion}</p>
                     </div>
-                    
                     <div class="flex items-center gap-3 ml-2">
                         <button onclick="toggleInventario(${realIndex})" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors ${card.enInventario ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-400'}">
                             <i class="fa-solid fa-check"></i>
                         </button>
-                        
                         <div class="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
                             <button onclick="updateRepetidas(${realIndex}, -1)" class="w-7 h-7 text-gray-600 hover:bg-gray-200 rounded flex items-center justify-center">
                                 <i class="fa-solid fa-minus text-xs"></i>
@@ -306,38 +267,124 @@
                 `;
                 cardsContainer.appendChild(cardEl);
             });
-
-            if (dataToRender.length === 0) {
-                cardsContainer.innerHTML = `<p class="text-center text-gray-500 py-8 text-sm">No hay figuritas que coincidan con la selección.</p>`;
-            } else if (dataToRender.length > 100) {
-                const notice = document.createElement('p');
-                notice.className = 'text-center text-xs text-gray-400 mt-4';
-                notice.innerText = `Mostrando 100 de ${dataToRender.length} resultados. Refina con el buscador o sub-categorías.`;
-                cardsContainer.appendChild(notice);
-            }
         }
 
         window.toggleInventario = function(index) {
             albumData[index].enInventario = !albumData[index].enInventario;
-            if (!albumData[index].enInventario) {
-                albumData[index].repetidas = 0;
-            }
-            saveData();
-            filterCards(); 
+            if (!albumData[index].enInventario) albumData[index].repetidas = 0;
+            saveData(); filterCards(); 
         };
 
         window.updateRepetidas = function(index, change) {
             let newVal = albumData[index].repetidas + change;
             if (newVal < 0) newVal = 0;
-            
-            if (newVal > 0 && !albumData[index].enInventario) {
-                albumData[index].enInventario = true;
-            }
-            
+            if (newVal > 0 && !albumData[index].enInventario) albumData[index].enInventario = true;
             albumData[index].repetidas = newVal;
-            saveData();
-            filterCards();
+            saveData(); filterCards();
         };
+
+        // --- LÓGICA DE LA CÁMARA Y OCR ---
+
+        async function openScanner() {
+            scannerModal.classList.remove('hidden');
+            scanStatus.innerText = "Apunta al nombre o código de la figurita";
+            scanStatus.className = "text-blue-300 mb-4 text-sm font-medium h-5";
+            captureBtn.disabled = false;
+            captureBtn.classList.remove('opacity-50');
+
+            try {
+                // Solicitar cámara trasera
+                mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment' } 
+                });
+                cameraFeed.srcObject = mediaStream;
+            } catch (err) {
+                console.error(err);
+                scanStatus.innerText = "Permiso de cámara denegado.";
+                scanStatus.className = "text-red-400 mb-4 text-sm font-bold h-5";
+            }
+        }
+
+        function closeScanner() {
+            scannerModal.classList.add('hidden');
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+        }
+
+        async function captureAndScan() {
+            if (!mediaStream) return;
+            
+            captureBtn.disabled = true;
+            captureBtn.classList.add('opacity-50');
+            scanStatus.innerText = "Capturando e inicializando motor (puede tardar)...";
+            scanStatus.className = "text-yellow-400 mb-4 text-sm font-bold h-5 animate-pulse";
+
+            // Crear un canvas para tomar la foto del video
+            const canvas = document.createElement('canvas');
+            canvas.width = cameraFeed.videoWidth;
+            canvas.height = cameraFeed.videoHeight;
+            canvas.getContext('2d').drawImage(cameraFeed, 0, 0);
+
+            try {
+                // Pasar la imagen a Tesseract
+                const result = await Tesseract.recognize(canvas, 'spa', {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            scanStatus.innerText = `Analizando imagen: ${Math.round(m.progress * 100)}%`;
+                        }
+                    }
+                });
+
+                const recognizedText = quitarAcentos(result.data.text);
+                console.log("Texto detectado:", recognizedText);
+                procesarTextoEscaneado(recognizedText);
+                
+            } catch (error) {
+                console.error("Error en OCR:", error);
+                scanStatus.innerText = "Error al analizar la imagen.";
+                scanStatus.className = "text-red-400 mb-4 text-sm font-bold h-5";
+            }
+
+            setTimeout(closeScanner, 1500); // Cerrar después de mostrar el resultado brevemente
+        }
+
+        function procesarTextoEscaneado(textoGuto) {
+            let encontrado = false;
+
+            // Limpiamos el texto un poco más para evitar basura del OCR
+            const palabrasClave = textoGuto.split(/\s+/).filter(p => p.length > 2);
+
+            for (let i = 0; i < albumData.length; i++) {
+                const card = albumData[i];
+                const cod = quitarAcentos(card.codigo);
+                const desc = quitarAcentos(card.descripcion);
+
+                // Comprobamos si el texto escaneado contiene el código exacto o gran parte del nombre
+                if (textoGuto.includes(cod) || palabrasClave.some(palabra => desc.includes(palabra) && palabra.length > 4)) {
+                    
+                    if (!card.enInventario) {
+                        card.enInventario = true; // Se marca como la tuya usando tu lógica de base
+                        saveData();
+                        filterCards();
+                        showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`, true);
+                    } else {
+                        showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`, false);
+                    }
+                    encontrado = true;
+                    scanStatus.innerText = `¡Encontrado: ${card.codigo}!`;
+                    scanStatus.className = "text-green-400 mb-4 text-sm font-bold h-5";
+                    break;
+                }
+            }
+
+            if (!encontrado) {
+                scanStatus.innerText = "No se reconoció ninguna figurita con certeza.";
+                scanStatus.className = "text-orange-400 mb-4 text-sm font-bold h-5";
+                showToast("No se pudo identificar la figurita. Intenta buscarla manualmente.", false);
+            }
+        }
 
         init();
     </script>
