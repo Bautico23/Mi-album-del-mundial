@@ -10,22 +10,39 @@
     
     <style>
         body { background-color: #f3f4f6; font-family: sans-serif; }
-        ::-webkit-scrollbar { width: 6px; }
+        /* Ocultar barra de desplazamiento general */
+        ::-webkit-scrollbar { width: 6px; height: 4px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
+        /* Ocultar barra de desplazamiento específica para los filtros horizontales */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
     </style>
 </head>
 <body class="text-gray-800 pb-20">
 
-    <header class="bg-blue-900 text-white p-4 sticky top-0 z-50 shadow-md">
-        <h1 class="text-xl font-bold text-center mb-3">Mi Álbum Panini</h1>
-        
-        <div class="relative">
-            <span class="absolute inset-y-0 left-0 flex items-center pl-3">
-                <i class="fa-solid fa-search text-gray-400"></i>
-            </span>
-            <input type="text" id="searchInput" 
-                class="w-full py-2 pl-10 pr-4 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                placeholder="Buscar por jugador (Ej: Messi) o código...">
+    <header class="bg-blue-900 text-white sticky top-0 z-50 shadow-md">
+        <div class="p-4 pb-2">
+            <h1 class="text-xl font-bold text-center mb-3">Mi Álbum Panini</h1>
+            
+            <div class="relative">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+                    <i class="fa-solid fa-search text-gray-400"></i>
+                </span>
+                <input type="text" id="searchInput" 
+                    class="w-full py-2 pl-10 pr-4 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                    placeholder="Buscar por jugador (Ej: Messi) o código...">
+            </div>
+        </div>
+
+        <div class="bg-blue-800 px-2 py-3 border-t border-blue-700">
+            <div id="groupFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x">
+                </div>
         </div>
     </header>
 
@@ -52,22 +69,30 @@
     <script>
         const STORAGE_KEY = 'panini_album_data';
         let albumData = [];
+        let uniqueGroups = [];
+        let currentGroupFilter = 'Todos';
 
         const loadingSection = document.getElementById('loadingSection');
         const statsSection = document.getElementById('statsSection');
         const cardsContainer = document.getElementById('cardsContainer');
         const searchInput = document.getElementById('searchInput');
+        const groupFiltersContainer = document.getElementById('groupFilters');
+
+        // Función para eliminar acentos de un texto
+        function quitarAcentos(texto) {
+            if (!texto) return '';
+            return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        }
 
         // Inicializar aplicación
         async function init() {
             const storedData = localStorage.getItem(STORAGE_KEY);
             
             if (storedData) {
-                // Si ya existen datos guardados localmente, los usamos directamente
                 albumData = JSON.parse(storedData);
+                extractGroups();
                 showApp();
             } else {
-                // Si no hay datos, cargamos el archivo data.csv automáticamente
                 try {
                     const response = await fetch('data.csv');
                     if (!response.ok) throw new Error('No se pudo encontrar el archivo data.csv');
@@ -83,9 +108,10 @@
                                 descripcion: row['Descripción'],
                                 enInventario: row['En Inventario'] === 'TRUE' || row['En Inventario'] === 'True' || false,
                                 repetidas: parseInt(row['Repetidas']) || 0,
-                                grupo: row['Grupos']
+                                grupo: row['Grupos'] || 'Otros' // Por si algún campo viene vacío
                             }));
 
+                            extractGroups();
                             saveData();
                             showApp();
                         }
@@ -101,23 +127,69 @@
             }
         }
 
+        // Extraer los grupos únicos para la barra de navegación
+        function extractGroups() {
+            const gruposSet = new Set(albumData.map(item => item.grupo));
+            uniqueGroups = ['Todos', ...Array.from(gruposSet).filter(g => g)];
+        }
+
         function showApp() {
             loadingSection.classList.add('hidden');
             statsSection.classList.remove('hidden');
             statsSection.classList.add('grid');
-            renderCards(albumData);
+            renderGroupFilters();
+            filterCards();
             updateStats();
         }
 
-        searchInput.addEventListener('input', function(e) {
-            const term = e.target.value.toLowerCase();
-            const filtered = albumData.filter(card => 
-                (card.descripcion && card.descripcion.toLowerCase().includes(term)) || 
-                (card.codigo && card.codigo.toLowerCase().includes(term)) ||
-                (card.pais && card.pais.toLowerCase().includes(term))
-            );
+        // Renderizar los botones de grupos (píldoras)
+        function renderGroupFilters() {
+            groupFiltersContainer.innerHTML = '';
+            
+            uniqueGroups.forEach(grupo => {
+                const btn = document.createElement('button');
+                const isSelected = currentGroupFilter === grupo;
+                
+                // Clases del botón. Azul claro si está seleccionado, transparente si no.
+                btn.className = `snap-start whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors border-2 ${
+                    isSelected 
+                    ? 'bg-blue-100 text-blue-900 border-blue-200 shadow-sm' 
+                    : 'bg-transparent text-blue-100 border-transparent hover:bg-blue-700'
+                }`;
+                btn.innerText = grupo;
+                
+                btn.onclick = () => {
+                    currentGroupFilter = grupo;
+                    renderGroupFilters(); // Re-renderizar para actualizar el color seleccionado
+                    filterCards();        // Filtrar las tarjetas
+                };
+                
+                groupFiltersContainer.appendChild(btn);
+            });
+        }
+
+        // Función centralizada para filtrar por búsqueda Y grupo
+        function filterCards() {
+            const term = quitarAcentos(searchInput.value.toLowerCase());
+            
+            const filtered = albumData.filter(card => {
+                // Filtro de Búsqueda
+                const desc = quitarAcentos(card.descripcion ? card.descripcion.toLowerCase() : '');
+                const cod = quitarAcentos(card.codigo ? card.codigo.toLowerCase() : '');
+                const pais = quitarAcentos(card.pais ? card.pais.toLowerCase() : '');
+                const matchesSearch = desc.includes(term) || cod.includes(term) || pais.includes(term);
+                
+                // Filtro de Grupo
+                const matchesGroup = currentGroupFilter === 'Todos' || card.grupo === currentGroupFilter;
+
+                return matchesSearch && matchesGroup;
+            });
+            
             renderCards(filtered);
-        });
+        }
+
+        // Escuchar cambios en el buscador
+        searchInput.addEventListener('input', filterCards);
 
         function saveData() {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(albumData));
@@ -134,7 +206,7 @@
         function renderCards(dataToRender) {
             cardsContainer.innerHTML = '';
             
-            // Limitamos a 100 resultados para mantener fluidez en el celular
+            // Límite de seguridad visual para celulares
             const displayData = dataToRender.slice(0, 100); 
 
             displayData.forEach((card) => {
@@ -153,7 +225,7 @@
                     </div>
                     
                     <div class="flex items-center gap-3 ml-2">
-                        <button onclick="toggleInventario(${realIndex})" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors ${card.enInventario ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-400'}">
+                        <button onclick="toggleInventario(${realIndex})" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors ${card.enInventario ? 'bg-blue-500 text-white shadow-inner' : 'bg-gray-200 text-gray-400'}">
                             <i class="fa-solid fa-check"></i>
                         </button>
                         
@@ -171,7 +243,9 @@
                 cardsContainer.appendChild(cardEl);
             });
 
-            if (dataToRender.length > 100) {
+            if (dataToRender.length === 0) {
+                cardsContainer.innerHTML = `<p class="text-center text-gray-500 py-6">No se encontraron resultados para "${currentGroupFilter}".</p>`;
+            } else if (dataToRender.length > 100) {
                 const notice = document.createElement('p');
                 notice.className = 'text-center text-xs text-gray-400 mt-4';
                 notice.innerText = `Se muestran 100 de ${dataToRender.length} resultados. Usa el buscador para filtrar más.`;
@@ -180,27 +254,28 @@
         }
 
         window.toggleInventario = function(index) {
-            // El estado marcado (true) indica que la figurita está disponible en el inventario.
             albumData[index].enInventario = !albumData[index].enInventario;
             
+            // Si deja de estar disponible, vaciamos las repetidas
             if (!albumData[index].enInventario) {
                 albumData[index].repetidas = 0;
             }
             saveData();
-            searchInput.dispatchEvent(new Event('input')); 
+            filterCards(); 
         };
 
         window.updateRepetidas = function(index, change) {
             let newVal = albumData[index].repetidas + change;
             if (newVal < 0) newVal = 0;
             
+            // Si se suman repetidas, se marca automáticamente como disponible
             if (newVal > 0 && !albumData[index].enInventario) {
                 albumData[index].enInventario = true;
             }
             
             albumData[index].repetidas = newVal;
             saveData();
-            searchInput.dispatchEvent(new Event('input'));
+            filterCards();
         };
 
         init();
