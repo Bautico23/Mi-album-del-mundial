@@ -15,16 +15,12 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        /* Animación para el toque de enfoque */
         @keyframes focusPulse {
             0% { transform: scale(1.2); opacity: 1; }
             50% { transform: scale(0.9); opacity: 0.8; }
             100% { transform: scale(1); opacity: 0; }
         }
-        .animate-focus {
-            animation: focusPulse 0.8s ease-out forwards;
-        }
+        .animate-focus { animation: focusPulse 0.8s ease-out forwards; }
     </style>
 </head>
 <body class="text-gray-800 pb-20">
@@ -32,7 +28,6 @@
     <header class="bg-blue-900 text-white sticky top-0 z-50 shadow-md">
         <div class="p-4 pb-2">
             <h1 class="text-xl font-bold text-center mb-3">Mi Álbum Panini</h1>
-            
             <div class="relative flex gap-2">
                 <div class="relative flex-1">
                     <span class="absolute inset-y-0 left-0 flex items-center pl-3">
@@ -42,12 +37,12 @@
                         class="w-full py-2 pl-10 pr-4 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
                         placeholder="Buscar por jugador, país o código...">
                 </div>
+                
                 <button onclick="openScanner()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-lg shadow transition-colors flex items-center justify-center">
                     <i class="fa-solid fa-camera"></i>
                 </button>
             </div>
         </div>
-
         <div class="bg-blue-800 px-2 py-2.5 border-t border-blue-700">
             <div id="groupFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x"></div>
         </div>
@@ -73,7 +68,7 @@
             </div>
         </div>
 
-        <div id="toastNotification" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 text-sm font-medium">
+        <div id="toastNotification" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 text-sm font-medium w-max max-w-[90%] text-center">
             Notificación
         </div>
 
@@ -94,15 +89,24 @@
         <div id="cameraArea" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden cursor-crosshair">
             <video id="cameraFeed" autoplay playsinline class="object-cover w-full h-full"></video>
             
-            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div class="w-64 h-80 border-2 border-yellow-400/50 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
-            </div>
+            <canvas id="previewCanvas" class="absolute top-20 right-4 w-24 h-32 border-2 border-green-500 hidden z-30 bg-white object-contain"></canvas>
 
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div class="w-64 h-80 border-2 border-yellow-400/50 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center">
+                    <span class="text-yellow-400/50 text-xs mt-2 font-bold bg-black/30 px-2 rounded">Área de Lectura</span>
+                </div>
+            </div>
             <div id="focusRing" class="absolute hidden w-16 h-16 border-2 border-yellow-400 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 z-10"></div>
         </div>
 
-        <div class="bg-gray-900 p-6 flex flex-col items-center z-20">
-            <p id="scanStatus" class="text-blue-300 mb-4 text-sm font-medium h-5">Apunta o toca la pantalla para enfocar</p>
+        <div class="bg-gray-900 p-4 flex flex-col items-center z-20">
+            <div id="zoomContainer" class="w-full max-w-xs mb-4 hidden flex items-center gap-3">
+                <i class="fa-solid fa-magnifying-glass-minus text-gray-400 text-sm"></i>
+                <input type="range" id="zoomSlider" class="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                <i class="fa-solid fa-magnifying-glass-plus text-gray-400 text-sm"></i>
+            </div>
+
+            <p id="scanStatus" class="text-blue-300 mb-4 text-sm font-medium h-5 text-center">Enfoca el texto y captura</p>
             <button id="captureBtn" onclick="captureAndScan()" class="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center border-4 border-white shadow-lg active:scale-95 transition-transform">
                 <i class="fa-solid fa-camera text-white text-xl"></i>
             </button>
@@ -126,7 +130,6 @@
         const countryFiltersContainer = document.getElementById('countryFilters');
         const toastNotification = document.getElementById('toastNotification');
 
-        // Escáner DOM
         const scannerModal = document.getElementById('scannerModal');
         const cameraFeed = document.getElementById('cameraFeed');
         const scanStatus = document.getElementById('scanStatus');
@@ -134,20 +137,24 @@
         const flashIcon = document.getElementById('flashIcon');
         const cameraArea = document.getElementById('cameraArea');
         const focusRing = document.getElementById('focusRing');
+        const zoomContainer = document.getElementById('zoomContainer');
+        const zoomSlider = document.getElementById('zoomSlider');
+        const previewCanvas = document.getElementById('previewCanvas');
         
         let mediaStream = null;
         let isFlashOn = false;
+        let videoTrack = null;
 
         function quitarAcentos(texto) {
             if (!texto) return '';
             return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
         }
 
-        function showToast(message, isSuccess = true) {
+        function showToast(message, isSuccess = true, duration = 3000) {
             toastNotification.innerText = message;
-            toastNotification.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 z-50 text-sm font-medium ${isSuccess ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`;
+            toastNotification.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 z-50 text-sm font-medium w-max max-w-[90%] text-center ${isSuccess ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`;
             toastNotification.style.opacity = '1';
-            setTimeout(() => { toastNotification.style.opacity = '0'; }, 3000);
+            setTimeout(() => { toastNotification.style.opacity = '0'; }, duration);
         }
 
         async function init() {
@@ -292,6 +299,7 @@
         }
 
         window.toggleInventario = function(index) {
+            // El estado enInventario = true significa que el producto ESTÁ disponible
             albumData[index].enInventario = !albumData[index].enInventario;
             if (!albumData[index].enInventario) albumData[index].repetidas = 0;
             saveData(); filterCards(); 
@@ -305,99 +313,133 @@
             saveData(); filterCards();
         };
 
-        // --- FUNCIONES MEJORADAS DE CÁMARA (LINTERNA Y ENFOQUE) ---
-
+        // --- 📸 FUNCIONES DE CÁMARA PRINCIPAL FORZADA Y PROCESAMIENTO ---
         async function openScanner() {
             scannerModal.classList.remove('hidden');
-            scanStatus.innerText = "Apunta o toca la pantalla para enfocar";
+            previewCanvas.classList.add('hidden');
+            scanStatus.innerText = "Buscando cámara principal...";
             scanStatus.className = "text-blue-300 mb-4 text-sm font-medium h-5";
-            captureBtn.disabled = false;
-            captureBtn.classList.remove('opacity-50');
+            captureBtn.disabled = true;
+            captureBtn.classList.add('opacity-50');
             isFlashOn = false;
             flashIcon.className = "fa-solid fa-bolt-slash";
+            zoomContainer.classList.add('hidden');
 
             try {
-                // Pedimos explícitamente alta resolución (1080p)
-                mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        advanced: [{ focusMode: "continuous" }] 
-                    } 
+                // 1. Pedir permiso rápido para desbloquear las etiquetas de las cámaras
+                let tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                
+                // 2. Leer todas las cámaras disponibles en el equipo
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                
+                // 3. Identificar cámaras traseras
+                const backCameras = videoDevices.filter(device => {
+                    const label = device.label.toLowerCase();
+                    return label.includes('back') || label.includes('trasera') || label.includes('environment');
                 });
+
+                let mainCameraId = null;
+
+                if (backCameras.length > 0) {
+                    // Filtrar y eliminar las cámaras panorámicas, ultrawide, teleobjetivo o infrarrojas
+                    const standardCameras = backCameras.filter(device => {
+                        const label = device.label.toLowerCase();
+                        return !label.includes('ultrawide') && 
+                               !label.includes('ultra wide') && 
+                               !label.includes('ultra-wide') && 
+                               !label.includes('telephoto') &&
+                               !label.includes('depth');
+                    });
+                    
+                    // Elegir la cámara estándar principal si se encontró, sino hacer fallback a la primera trasera
+                    mainCameraId = standardCameras.length > 0 ? standardCameras[0].deviceId : backCameras[0].deviceId;
+                }
+
+                // Apagar el stream temporal
+                tempStream.getTracks().forEach(track => track.stop());
+
+                // 4. Iniciar el video forzando la ID de la cámara principal exacta y en Full HD
+                const constraints = {
+                    video: {
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+
+                if (mainCameraId) {
+                    constraints.video.deviceId = { exact: mainCameraId };
+                } else {
+                    constraints.video.facingMode = 'environment'; // Fallback por si acaso
+                }
+
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
                 cameraFeed.srcObject = mediaStream;
+                videoTrack = mediaStream.getVideoTracks()[0];
+
+                captureBtn.disabled = false;
+                captureBtn.classList.remove('opacity-50');
+                scanStatus.innerText = "Aleja la cámara y usa el zoom";
+
+                // Iniciar controles de zoom si es soportado
+                setTimeout(() => {
+                    const capabilities = videoTrack.getCapabilities();
+                    if (capabilities.zoom) {
+                        zoomContainer.classList.remove('hidden');
+                        zoomSlider.min = capabilities.zoom.min || 1;
+                        zoomSlider.max = capabilities.zoom.max || 5;
+                        zoomSlider.step = capabilities.zoom.step || 0.1;
+                        zoomSlider.value = capabilities.zoom.min || 1;
+                        zoomSlider.addEventListener('input', async (e) => {
+                            try { await videoTrack.applyConstraints({ advanced: [{ zoom: e.target.value }] }); } catch (error) {}
+                        });
+                    }
+                }, 500);
+
             } catch (err) {
                 console.error(err);
-                scanStatus.innerText = "Permiso de cámara denegado o error de hardware.";
+                scanStatus.innerText = "Error: No se pudo acceder a la cámara principal.";
                 scanStatus.className = "text-red-400 mb-4 text-sm font-bold h-5";
             }
         }
-        
+
         function closeScanner() {
             scannerModal.classList.add('hidden');
             if (mediaStream) {
-                // Apagar linterna al cerrar por precaución
                 if (isFlashOn) toggleFlash();
                 mediaStream.getTracks().forEach(track => track.stop());
                 mediaStream = null;
+                videoTrack = null;
             }
         }
 
-        // Sistema de encendido de Linterna (Flash)
         async function toggleFlash() {
-            if (!mediaStream) return;
-            const track = mediaStream.getVideoTracks()[0];
-            const capabilities = track.getCapabilities();
-            
+            if (!videoTrack) return;
+            const capabilities = videoTrack.getCapabilities();
             if (capabilities.torch) {
                 isFlashOn = !isFlashOn;
                 try {
-                    await track.applyConstraints({ advanced: [{ torch: isFlashOn }] });
+                    await videoTrack.applyConstraints({ advanced: [{ torch: isFlashOn }] });
                     flashIcon.className = isFlashOn ? "fa-solid fa-bolt text-yellow-400" : "fa-solid fa-bolt-slash";
-                } catch (err) {
-                    console.error("Error al activar flash:", err);
-                }
+                } catch (err) {}
             } else {
-                scanStatus.innerText = "El flash no es compatible en este dispositivo/navegador.";
-                scanStatus.className = "text-orange-400 mb-4 text-sm font-medium h-5";
-                setTimeout(() => {
-                    if (scannerModal.classList.contains('hidden') === false) {
-                        scanStatus.innerText = "Apunta o toca la pantalla para enfocar";
-                        scanStatus.className = "text-blue-300 mb-4 text-sm font-medium h-5";
-                    }
-                }, 3000);
+                showToast("Flash no compatible.", false);
             }
         }
 
-        // Sistema de Enfoque Táctil
         cameraArea.addEventListener('click', async (e) => {
-            if (!mediaStream) return;
-
-            // Coordenadas relativas al área del video
+            if (!videoTrack) return;
             const rect = cameraArea.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
-
-            // Mover el anillo visual y reiniciar animación
-            focusRing.style.left = `${x}px`;
-            focusRing.style.top = `${y}px`;
+            focusRing.style.left = `${x}px`; focusRing.style.top = `${y}px`;
             focusRing.classList.remove('hidden', 'animate-focus');
-            
-            // Forzar reflow del DOM para reiniciar animación
-            void focusRing.offsetWidth; 
-            focusRing.classList.add('animate-focus');
-
-            // Ocultar el anillo después de la animación
+            void focusRing.offsetWidth; focusRing.classList.add('animate-focus');
             setTimeout(() => { focusRing.classList.add('hidden'); }, 800);
 
-            // Intentar re-gatillar el enfoque nativo del teléfono
-            const track = mediaStream.getVideoTracks()[0];
-            const capabilities = track.getCapabilities();
+            const capabilities = videoTrack.getCapabilities();
             if (capabilities.focusMode) {
-                try {
-                    await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
-                } catch(err) { console.warn("No se pudo forzar el autofocus por hardware:", err); }
+                try { await videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch(err) {}
             }
         });
 
@@ -405,43 +447,72 @@
             if (!mediaStream) return;
             captureBtn.disabled = true;
             captureBtn.classList.add('opacity-50');
-            scanStatus.innerText = "Capturando e inicializando motor...";
+            scanStatus.innerText = "Aplicando filtro de alto contraste...";
             scanStatus.className = "text-yellow-400 mb-4 text-sm font-bold h-5 animate-pulse";
 
+            const videoW = cameraFeed.videoWidth;
+            const videoH = cameraFeed.videoHeight;
+            
+            const cropW = videoW * 0.5; 
+            const cropH = videoH * 0.4;
+            const cropX = (videoW - cropW) / 2;
+            const cropY = (videoH - cropH) / 2;
+
             const canvas = document.createElement('canvas');
-            canvas.width = cameraFeed.videoWidth;
-            canvas.height = cameraFeed.videoHeight;
-            canvas.getContext('2d').drawImage(cameraFeed, 0, 0);
+            canvas.width = cropW;
+            canvas.height = cropH;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.drawImage(cameraFeed, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+            let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let pixels = imgData.data;
+            for (let i = 0; i < pixels.length; i += 4) {
+                let lightness = (pixels[i] * 0.3) + (pixels[i+1] * 0.59) + (pixels[i+2] * 0.11);
+                let color = lightness > 110 ? 255 : 0; 
+                pixels[i] = color;     
+                pixels[i+1] = color;   
+                pixels[i+2] = color;   
+            }
+            ctx.putImageData(imgData, 0, 0);
+
+            previewCanvas.width = canvas.width;
+            previewCanvas.height = canvas.height;
+            previewCanvas.getContext('2d').putImageData(imgData, 0, 0);
+            previewCanvas.classList.remove('hidden');
+
+            scanStatus.innerText = "Analizando texto limpio...";
 
             try {
-                const result = await Tesseract.recognize(canvas, 'spa', {
-                    logger: m => {
-                        if (m.status === 'recognizing text') {
-                            scanStatus.innerText = `Analizando imagen: ${Math.round(m.progress * 100)}%`;
-                        }
-                    }
-                });
-
+                const result = await Tesseract.recognize(canvas, 'spa');
                 const recognizedText = quitarAcentos(result.data.text);
-                procesarTextoEscaneado(recognizedText);
+                procesarTexto(recognizedText);
             } catch (error) {
-                console.error("Error en OCR:", error);
-                scanStatus.innerText = "Error al analizar la imagen.";
+                scanStatus.innerText = "Error al analizar.";
                 scanStatus.className = "text-red-400 mb-4 text-sm font-bold h-5";
             }
-            setTimeout(closeScanner, 2000);
+            setTimeout(() => { closeScanner(); previewCanvas.classList.add('hidden'); }, 3000);
         }
 
-        function procesarTextoEscaneado(textoGuto) {
+        function procesarTexto(textoIngresado) {
             let encontrado = false;
-            const palabrasClave = textoGuto.split(/\s+/).filter(p => p.length > 2);
+            textoIngresado = textoIngresado.replace(/[^\w\s]/gi, ' ').toLowerCase();
+            const palabrasClave = textoIngresado.split(/\s+/).filter(p => p.length > 2); 
+
+            textoIngresado = palabrasClave.join(' ');
 
             for (let i = 0; i < albumData.length; i++) {
                 const card = albumData[i];
-                const cod = quitarAcentos(card.codigo);
-                const desc = quitarAcentos(card.descripcion);
+                const cod = quitarAcentos(card.codigo).toLowerCase();
+                const desc = quitarAcentos(card.descripcion).toLowerCase();
 
-                if (textoGuto.includes(cod) || palabrasClave.some(palabra => desc.includes(palabra) && palabra.length > 4)) {
+                const codSinGuion = cod.replace('-', ' ');
+
+                let coincidenciasDesc = 0;
+                palabrasClave.forEach(p => { if(desc.includes(p)) coincidenciasDesc++; });
+
+                if (textoIngresado.includes(cod) || textoIngresado.includes(codSinGuion) || (coincidenciasDesc >= 2 && palabrasClave.length > 1) || (coincidenciasDesc >= 1 && desc.split(' ').length === 1)) {
+                    
                     if (!card.enInventario) {
                         card.enInventario = true; 
                         saveData();
@@ -451,16 +522,20 @@
                         showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`, false);
                     }
                     encontrado = true;
-                    scanStatus.innerText = `¡Encontrado: ${card.codigo}!`;
-                    scanStatus.className = "text-green-400 mb-4 text-sm font-bold h-5";
+                    if(scannerModal.classList.contains('hidden') === false){
+                        scanStatus.innerText = `¡Detectado: ${card.codigo}!`;
+                        scanStatus.className = "text-green-400 mb-4 text-sm font-bold h-5";
+                    }
                     break;
                 }
             }
 
             if (!encontrado) {
-                scanStatus.innerText = "No se reconoció ninguna figurita.";
-                scanStatus.className = "text-orange-400 mb-4 text-sm font-bold h-5";
-                showToast("No se pudo identificar la figurita. Intenta buscarla manualmente.", false);
+                if(scannerModal.classList.contains('hidden') === false){
+                    scanStatus.innerText = "No se reconoció (Revisa la vista previa).";
+                    scanStatus.className = "text-orange-400 mb-4 text-sm font-bold h-5";
+                }
+                showToast("No se encontró coincidencia exacta.", false);
             }
         }
 
