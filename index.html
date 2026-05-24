@@ -715,6 +715,22 @@ function procesarTexto(textoCrudo) {
     }
 }
 
+function procesarTexto(texto) {
+    const palabras=texto.split(/\s+/).filter(p=>p.length>2);
+    for(let i=0;i<albumData.length;i++){
+        const card=albumData[i];
+        const cod=quitarAcentos(card.codigo), desc=quitarAcentos(card.descripcion);
+        if(texto.includes(cod)||palabras.some(p=>desc.includes(p)&&p.length>4)){
+            if(!card.enInventario){ card.enInventario=true; saveData(); filterCards(); showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`,true); }
+            else showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`,false);
+            setStatus(`¡Encontrado: ${card.codigo}!`,'green');
+            return;
+        }
+    }
+    setStatus('No se reconoció ninguna figurita.','orange');
+    showToast('No se pudo identificar. Búscala manualmente.',false);
+}
+
 init();
 </script>
 </body>
