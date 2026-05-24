@@ -616,32 +616,103 @@ window.confirmScan = () => {
 };
 
 async function runOCR(canvas) {
-    captureBtn.disabled=true; captureBtn.classList.add('opacity-50');
-    setStatus('Analizando imagen...','yellow');
+    captureBtn.disabled = true; 
+    captureBtn.classList.add('opacity-50');
+    setStatus('Analizando imagen...', 'yellow');
+    
     try {
-        const result=await Tesseract.recognize(canvas,'spa',{
-            logger: m=>{ if(m.status==='recognizing text') setStatus(`Leyendo: ${Math.round(m.progress*100)}%`,'yellow'); }
+        const result = await Tesseract.recognize(canvas, 'spa', {
+            logger: m => { 
+                if(m.status === 'recognizing text') setStatus(`Leyendo: ${Math.round(m.progress * 100)}%`, 'yellow'); 
+            },
+            // Novedad: Obligamos a Tesseract a leer SOLO mayúsculas, números y guiones
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- '
         });
-        procesarTexto(quitarAcentos(result.data.text));
-    } catch(e){ console.error(e); setStatus('Error al analizar la imagen.','red'); }
-    captureBtn.disabled=false; captureBtn.classList.remove('opacity-50');
-    setTimeout(closeScanner,2500);
+        
+        console.log("Texto crudo de Tesseract:", result.data.text);
+        procesarTexto(result.data.text);
+        
+    } catch(e) { 
+        console.error(e); 
+        setStatus('Error al analizar la imagen.', 'red'); 
+    }
+    
+    captureBtn.disabled = false; 
+    captureBtn.classList.remove('opacity-50');
+    setTimeout(closeScanner, 2500);
 }
 
-function procesarTexto(texto) {
-    const palabras=texto.split(/\s+/).filter(p=>p.length>2);
-    for(let i=0;i<albumData.length;i++){
-        const card=albumData[i];
-        const cod=quitarAcentos(card.codigo), desc=quitarAcentos(card.descripcion);
-        if(texto.includes(cod)||palabras.some(p=>desc.includes(p)&&p.length>4)){
-            if(!card.enInventario){ card.enInventario=true; saveData(); filterCards(); showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`,true); }
-            else showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`,false);
-            setStatus(`¡Encontrado: ${card.codigo}!`,'green');
-            return;
+function procesarTexto(textoCrudo) {
+    // 1. Limpieza inicial: Todo a mayúsculas para buscar los códigos
+    let texto = textoCrudo.toUpperCase();
+
+    // 2. Corrector de errores típicos de cámara
+    // Cambia los ceros y cincos que lee mal al principio por letras, y luego fuerza números después del guion
+    texto = texto.replace(/0/g, 'O').replace(/5/g, 'S').replace(/8/g, 'B'); 
+    texto = texto.replace(/-O/g, '-0').replace(/-S/g, '-5').replace(/-B/g, '-8').replace(/-I/g, '-1');
+
+    console.log("Texto procesado y corregido:", texto);
+
+    let encontrado = false;
+
+    // 3. Cazador de Patrones (Regex)
+    // Busca 2 o 3 letras, un posible espacio o guion, y 1 o 2 números (Ej: ARG-10, FWC 1)
+    const regexCodigo = /([A-Z]{2,3})[\s\-]*([0-9]{1,2})/g;
+    const coincidencias = [...texto.matchAll(regexCodigo)];
+
+    if (coincidencias.length > 0) {
+        for (let match of coincidencias) {
+            // Reconstruimos el código limpio (si leyó "ARG 10", lo arma como "ARG-10")
+            let codigoExtraido = `${match[1]}-${match[2]}`;
+            
+            let cardIndex = albumData.findIndex(c => c.codigo === codigoExtraido);
+            
+            if (cardIndex !== -1) {
+                const card = albumData[cardIndex];
+                if (!card.enInventario) {
+                    albumData[cardIndex].enInventario = true; 
+                    saveData(); 
+                    filterCards(); 
+                    showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`, true);
+                } else {
+                    showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`, false);
+                }
+                setStatus(`¡Encontrado: ${card.codigo}!`, 'green');
+                encontrado = true;
+                break;
+            }
         }
     }
-    setStatus('No se reconoció ninguna figurita.','orange');
-    showToast('No se pudo identificar. Búscala manualmente.',false);
+
+    // 4. Fallback: Si no encontró el código por patrón, intentamos buscar el nombre
+    if (!encontrado) {
+        const textoNormalizado = quitarAcentos(textoCrudo).toLowerCase();
+        const palabras = textoNormalizado.split(/\s+/).filter(p => p.length > 4);
+        
+        for (let card of albumData) {
+            const desc = quitarAcentos(card.descripcion).toLowerCase();
+            let coincidenciasDesc = palabras.filter(p => desc.includes(p)).length;
+            
+            if (coincidenciasDesc >= 2 || (coincidenciasDesc >= 1 && desc.split(' ').length === 1)) {
+                if (!card.enInventario) {
+                    card.enInventario = true; 
+                    saveData(); 
+                    filterCards();
+                    showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`, true);
+                } else {
+                    showToast(`Ya tenías a ${card.descripcion}`, false);
+                }
+                setStatus(`¡Encontrado: ${card.codigo}!`, 'green');
+                encontrado = true;
+                break;
+            }
+        }
+    }
+
+    if (!encontrado) {
+        setStatus('No se reconoció el código.', 'orange');
+        showToast('Apunta directamente al código (Ej: ARG-10)', false);
+    }
 }
 
 init();
