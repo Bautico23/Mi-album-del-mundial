@@ -8,627 +8,583 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    
     <style>
         body { background-color: #f3f4f6; font-family: sans-serif; }
         ::-webkit-scrollbar { width: 6px; height: 4px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
         @keyframes focusPulse {
-            0% { transform: scale(1.2) translate(-50%, -50%); opacity: 1; }
-            50% { transform: scale(0.9) translate(-50%, -50%); opacity: 0.8; }
-            100% { transform: scale(1) translate(-50%, -50%); opacity: 0; }
+            0%   { transform: translate(-50%,-50%) scale(1.4); opacity: 1; }
+            100% { transform: translate(-50%,-50%) scale(1);   opacity: 0; }
         }
         #focusRing {
             position: absolute;
-            width: 64px;
-            height: 64px;
+            width: 60px; height: 60px;
             border: 2px solid #FBBF24;
+            border-radius: 4px;
             pointer-events: none;
-            transform-origin: top left;
-            /* posicionado via JS con left/top + translate(-50%,-50%) */
+            display: none;
         }
-        #focusRing.animate-focus {
-            animation: focusPulse 0.8s ease-out forwards;
-        }
+        #focusRing.active { display: block; animation: focusPulse 0.7s ease-out forwards; }
     </style>
 </head>
 <body class="text-gray-800 pb-20">
 
-    <header class="bg-blue-900 text-white sticky top-0 z-50 shadow-md">
-        <div class="p-4 pb-2">
-            <h1 class="text-xl font-bold text-center mb-3">Mi Álbum Panini</h1>
-            <div class="relative flex gap-2">
-                <div class="relative flex-1">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-3">
-                        <i class="fa-solid fa-search text-gray-400"></i>
-                    </span>
-                    <input type="text" id="searchInput" 
-                        class="w-full py-2 pl-10 pr-4 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
-                        placeholder="Buscar por jugador, país o código...">
-                </div>
-                <button onclick="openScanner()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-lg shadow transition-colors flex items-center justify-center">
-                    <i class="fa-solid fa-camera"></i>
-                </button>
+<header class="bg-blue-900 text-white sticky top-0 z-50 shadow-md">
+    <div class="p-4 pb-2">
+        <h1 class="text-xl font-bold text-center mb-3">Mi Álbum Panini</h1>
+        <div class="relative flex gap-2">
+            <div class="relative flex-1">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+                    <i class="fa-solid fa-search text-gray-400"></i>
+                </span>
+                <input type="text" id="searchInput"
+                    class="w-full py-2 pl-10 pr-4 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    placeholder="Buscar por jugador, país o código...">
             </div>
-        </div>
-
-        <div class="bg-blue-800 px-2 py-2.5 border-t border-blue-700">
-            <div id="groupFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x"></div>
-        </div>
-        <div id="countryFiltersContainer" class="bg-slate-800 px-2 py-2 border-t border-slate-700 hidden">
-            <div id="countryFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x"></div>
-        </div>
-    </header>
-
-    <main class="p-4 max-w-2xl mx-auto">
-        <div id="loadingSection" class="text-center py-10">
-            <i class="fa-solid fa-spinner fa-spin text-4xl text-blue-600 mb-3"></i>
-            <p class="text-gray-600">Cargando base de datos...</p>
-        </div>
-
-        <div id="statsSection" class="hidden grid-cols-2 gap-4 mb-6">
-            <div class="bg-white p-3 rounded-lg shadow-sm text-center">
-                <p class="text-xs text-gray-500 uppercase font-bold">Completado</p>
-                <p class="text-xl font-bold text-blue-600" id="progressCount">0 / 980</p>
-            </div>
-            <div class="bg-white p-3 rounded-lg shadow-sm text-center">
-                <p class="text-xs text-gray-500 uppercase font-bold">Repetidas</p>
-                <p class="text-xl font-bold text-orange-500" id="duplicatesCount">0</p>
-            </div>
-        </div>
-
-        <div id="toastNotification" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 text-sm font-medium">
-            Notificación
-        </div>
-
-        <div id="cardsContainer" class="grid gap-3"></div>
-    </main>
-
-    <!-- Modal escáner -->
-    <div id="scannerModal" class="fixed inset-0 bg-black z-[100] hidden flex flex-col">
-        <div class="p-4 flex justify-between items-center text-white bg-black/50 absolute top-0 w-full z-20">
-            <button onclick="toggleFlash()" class="text-white text-2xl w-10 h-10 flex items-center justify-center bg-gray-800/60 rounded-full">
-                <i class="fa-solid fa-bolt-slash" id="flashIcon"></i>
-            </button>
-            <h2 class="text-lg font-bold">Escanear</h2>
-            <button onclick="closeScanner()" class="text-white text-2xl w-10 h-10 flex items-center justify-center bg-gray-800/60 rounded-full">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        </div>
-        
-        <!-- Área de cámara con guía visual -->
-        <div id="cameraArea" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden cursor-crosshair">
-            <video id="cameraFeed" autoplay playsinline muted class="object-cover w-full h-full"></video>
-            
-            <!-- Marco guía centrado -->
-            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div id="scanGuide" class="w-64 h-80 border-2 border-yellow-400/70 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]">
-                    <!-- esquinas decorativas -->
-                    <div class="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-yellow-400 rounded-tl"></div>
-                    <div class="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-yellow-400 rounded-tr"></div>
-                    <div class="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-yellow-400 rounded-bl"></div>
-                    <div class="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-yellow-400 rounded-br"></div>
-                </div>
-            </div>
-
-            <!-- Anillo de enfoque táctil -->
-            <div id="focusRing" class="hidden"></div>
-
-            <!-- Preview del recorte antes de OCR -->
-            <div id="previewContainer" class="hidden absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10">
-                <p class="text-white text-sm mb-3 font-semibold">¿La imagen está nítida?</p>
-                <img id="previewImg" class="rounded-lg border-2 border-yellow-400 max-h-60 mb-4" />
-                <div class="flex gap-4">
-                    <button onclick="confirmScan()" class="bg-green-600 text-white px-5 py-2 rounded-full font-bold text-sm">Analizar</button>
-                    <button onclick="retryCapture()" class="bg-gray-600 text-white px-5 py-2 rounded-full font-bold text-sm">Reintentar</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-gray-900 p-6 flex flex-col items-center z-20">
-            <p id="scanStatus" class="text-blue-300 mb-4 text-sm font-medium h-5 text-center">Centra la figurita y toca para enfocar</p>
-            <button id="captureBtn" onclick="captureForPreview()" class="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center border-4 border-white shadow-lg active:scale-95 transition-transform">
-                <i class="fa-solid fa-camera text-white text-xl"></i>
+            <button onclick="openScanner()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-lg shadow transition-colors flex items-center justify-center">
+                <i class="fa-solid fa-camera"></i>
             </button>
         </div>
     </div>
+    <div class="bg-blue-800 px-2 py-2.5 border-t border-blue-700">
+        <div id="groupFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x"></div>
+    </div>
+    <div id="countryFiltersContainer" class="bg-slate-800 px-2 py-2 border-t border-slate-700 hidden">
+        <div id="countryFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x"></div>
+    </div>
+</header>
 
-    <script>
-        const STORAGE_KEY = 'panini_album_data';
-        let albumData = [];
-        let uniqueGroups = [];
-        let uniqueCountries = [];
-        let currentGroupFilter = 'Todos';
-        let currentCountryFilter = 'Todos';
+<main class="p-4 max-w-2xl mx-auto">
+    <div id="loadingSection" class="text-center py-10">
+        <i class="fa-solid fa-spinner fa-spin text-4xl text-blue-600 mb-3"></i>
+        <p class="text-gray-600">Cargando base de datos...</p>
+    </div>
+    <div id="statsSection" class="hidden grid-cols-2 gap-4 mb-6">
+        <div class="bg-white p-3 rounded-lg shadow-sm text-center">
+            <p class="text-xs text-gray-500 uppercase font-bold">Completado</p>
+            <p class="text-xl font-bold text-blue-600" id="progressCount">0 / 980</p>
+        </div>
+        <div class="bg-white p-3 rounded-lg shadow-sm text-center">
+            <p class="text-xs text-gray-500 uppercase font-bold">Repetidas</p>
+            <p class="text-xl font-bold text-orange-500" id="duplicatesCount">0</p>
+        </div>
+    </div>
+    <div id="toastNotification" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 text-sm font-medium"></div>
+    <div id="cardsContainer" class="grid gap-3"></div>
+</main>
 
-        const loadingSection = document.getElementById('loadingSection');
-        const statsSection = document.getElementById('statsSection');
-        const cardsContainer = document.getElementById('cardsContainer');
-        const searchInput = document.getElementById('searchInput');
-        const groupFiltersContainer = document.getElementById('groupFilters');
-        const countryFiltersWrapper = document.getElementById('countryFiltersContainer');
-        const countryFiltersContainer = document.getElementById('countryFilters');
-        const toastNotification = document.getElementById('toastNotification');
+<!-- MODAL ESCÁNER -->
+<div id="scannerModal" class="fixed inset-0 bg-black z-[100] hidden flex-col">
 
-        const scannerModal = document.getElementById('scannerModal');
-        const cameraFeed = document.getElementById('cameraFeed');
-        const cameraArea = document.getElementById('cameraArea');
-        const scanStatus = document.getElementById('scanStatus');
-        const captureBtn = document.getElementById('captureBtn');
-        const flashIcon = document.getElementById('flashIcon');
-        const focusRing = document.getElementById('focusRing');
-        const previewContainer = document.getElementById('previewContainer');
-        const previewImg = document.getElementById('previewImg');
+    <!-- Barra superior -->
+    <div class="p-4 flex justify-between items-center text-white bg-black/50 absolute top-0 w-full z-20">
+        <button onclick="toggleFlash()" class="text-white text-2xl w-10 h-10 flex items-center justify-center bg-gray-800/60 rounded-full">
+            <i id="flashIcon" class="fa-solid fa-bolt-slash"></i>
+        </button>
+        <div class="text-center">
+            <h2 class="text-base font-bold leading-none">Escanear figurita</h2>
+            <p id="zoomLabel" class="text-yellow-300 text-xs mt-0.5">Zoom: 1×</p>
+        </div>
+        <button onclick="closeScanner()" class="text-white text-2xl w-10 h-10 flex items-center justify-center bg-gray-800/60 rounded-full">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
 
-        let mediaStream = null;
-        let isFlashOn = false;
-        let pendingCanvas = null; // canvas con el recorte listo para OCR
+    <!-- Área de cámara -->
+    <div id="cameraArea" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+        <video id="cameraFeed" autoplay playsinline muted class="object-cover w-full h-full"></video>
 
-        // ─── Utilidades ──────────────────────────────────────────────────────────
+        <!-- Marco guía -->
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div class="relative w-64 h-80 border-2 border-yellow-400/70 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]">
+                <div class="absolute top-0 left-0  w-5 h-5 border-t-4 border-l-4 border-yellow-400 rounded-tl"></div>
+                <div class="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-yellow-400 rounded-tr"></div>
+                <div class="absolute bottom-0 left-0  w-5 h-5 border-b-4 border-l-4 border-yellow-400 rounded-bl"></div>
+                <div class="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-yellow-400 rounded-br"></div>
+            </div>
+        </div>
 
-        function quitarAcentos(texto) {
-            if (!texto) return '';
-            return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        }
+        <div id="focusRing"></div>
+    </div>
 
-        function showToast(message, isSuccess = true) {
-            toastNotification.innerText = message;
-            toastNotification.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 z-50 text-sm font-medium ${isSuccess ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`;
-            toastNotification.style.opacity = '1';
-            setTimeout(() => { toastNotification.style.opacity = '0'; }, 3000);
-        }
+    <!-- Controles de zoom -->
+    <div class="bg-gray-900/90 px-4 pt-3 pb-1 z-20">
+        <div class="flex items-center gap-3">
+            <span class="text-gray-400 text-xs w-4">1×</span>
+            <input type="range" id="zoomSlider" min="1" max="4" step="0.1" value="1"
+                class="flex-1 h-1 appearance-none bg-gray-600 rounded-full outline-none">
+            <span class="text-gray-400 text-xs w-4">4×</span>
+        </div>
+        <p class="text-gray-500 text-xs text-center mt-1">Desliza para acercar · Toca la imagen para enfocar</p>
+    </div>
 
-        // ─── Datos ───────────────────────────────────────────────────────────────
+    <!-- Barra inferior -->
+    <div class="bg-gray-900 px-6 py-5 flex flex-col items-center z-20">
+        <p id="scanStatus" class="text-blue-300 mb-4 text-sm font-medium text-center min-h-5"></p>
+        <button id="captureBtn" onclick="captureForPreview()"
+            class="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center border-4 border-white shadow-lg active:scale-95 transition-transform">
+            <i class="fa-solid fa-camera text-white text-xl"></i>
+        </button>
+    </div>
 
-        async function init() {
-            const storedData = localStorage.getItem(STORAGE_KEY);
-            if (storedData) {
-                albumData = JSON.parse(storedData);
-                extractGroups();
-                showApp();
-            } else {
-                try {
-                    const response = await fetch('data.csv');
-                    if (!response.ok) throw new Error('No data.csv');
-                    const csvText = await response.text();
-                    Papa.parse(csvText, {
-                        header: true,
-                        skipEmptyLines: true,
-                        complete: function(results) {
-                            albumData = results.data.map(row => ({
-                                codigo: row['Código'],
-                                pais: row['Categoría / Pais'],
-                                descripcion: row['Descripción'],
-                                enInventario: row['En Inventario'] === 'TRUE' || row['En Inventario'] === 'True' || false,
-                                repetidas: parseInt(row['Repetidas']) || 0,
-                                grupo: row['Grupos'] || 'Otros'
-                            }));
-                            extractGroups();
-                            saveData();
-                            showApp();
-                        }
-                    });
-                } catch (error) {
-                    loadingSection.innerHTML = `<p class="text-red-600 font-bold">Error al leer data.csv</p>`;
-                }
-            }
-        }
+    <!-- Preview para confirmar nitidez -->
+    <div id="previewContainer" class="hidden absolute inset-0 bg-black/85 flex flex-col items-center justify-center z-30 p-6">
+        <p class="text-white font-semibold mb-3">¿La imagen se ve nítida?</p>
+        <img id="previewImg" class="rounded-lg border-2 border-yellow-400 max-h-64 mb-5 object-contain" />
+        <div class="flex gap-4">
+            <button onclick="retryCapture()" class="bg-gray-700 text-white px-6 py-2.5 rounded-full font-bold text-sm">
+                <i class="fa-solid fa-rotate-left mr-1"></i> Reintentar
+            </button>
+            <button onclick="confirmScan()" class="bg-green-600 text-white px-6 py-2.5 rounded-full font-bold text-sm">
+                <i class="fa-solid fa-check mr-1"></i> Analizar
+            </button>
+        </div>
+    </div>
+</div>
 
-        function extractGroups() {
-            const gruposSet = new Set(albumData.map(item => item.grupo));
-            uniqueGroups = ['Todos', ...Array.from(gruposSet).filter(g => g)];
-        }
+<script>
+// ─── Estado global ────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'panini_album_data';
+let albumData = [];
+let uniqueGroups = [];
+let uniqueCountries = [];
+let currentGroupFilter = 'Todos';
+let currentCountryFilter = 'Todos';
 
-        function updateCountryFiltersList() {
-            let filteredItems = currentGroupFilter !== 'Todos' ? albumData.filter(item => item.grupo === currentGroupFilter) : albumData;
-            const paisesSet = new Set(filteredItems.map(item => item.pais));
-            uniqueCountries = ['Todos', ...Array.from(paisesSet).filter(p => p)];
-            if (!uniqueCountries.includes(currentCountryFilter)) currentCountryFilter = 'Todos';
-        }
+let mediaStream   = null;
+let isFlashOn     = false;
+let currentZoom   = 1;      // zoom digital aplicado en canvas
+let nativeZoomMin = 1;
+let nativeZoomMax = 1;
+let useNativeZoom = false;
+let pendingCanvas = null;
 
-        function showApp() {
-            loadingSection.classList.add('hidden');
-            statsSection.classList.remove('hidden');
-            statsSection.classList.add('grid');
-            renderGroupFilters();
-            updateCountryFiltersList();
-            renderCountryFilters();
-            filterCards();
-            updateStats();
-        }
+// ─── DOM refs ────────────────────────────────────────────────────────────────
+const loadingSection      = document.getElementById('loadingSection');
+const statsSection        = document.getElementById('statsSection');
+const cardsContainer      = document.getElementById('cardsContainer');
+const searchInput         = document.getElementById('searchInput');
+const groupFiltersEl      = document.getElementById('groupFilters');
+const countryFiltersWrap  = document.getElementById('countryFiltersContainer');
+const countryFiltersEl    = document.getElementById('countryFilters');
+const toastEl             = document.getElementById('toastNotification');
+const scannerModal        = document.getElementById('scannerModal');
+const cameraFeed          = document.getElementById('cameraFeed');
+const cameraArea          = document.getElementById('cameraArea');
+const scanStatus          = document.getElementById('scanStatus');
+const captureBtn          = document.getElementById('captureBtn');
+const flashIcon           = document.getElementById('flashIcon');
+const focusRing           = document.getElementById('focusRing');
+const previewContainer    = document.getElementById('previewContainer');
+const previewImg          = document.getElementById('previewImg');
+const zoomSlider          = document.getElementById('zoomSlider');
+const zoomLabel           = document.getElementById('zoomLabel');
 
-        function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(albumData)); updateStats(); }
+// ─── Utilidades ───────────────────────────────────────────────────────────────
+function quitarAcentos(t) {
+    return t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase() : '';
+}
+function showToast(msg, ok=true) {
+    toastEl.innerText = msg;
+    toastEl.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 z-50 text-sm font-medium ${ok?'bg-green-600':'bg-red-600'} text-white`;
+    toastEl.style.opacity = '1';
+    setTimeout(() => toastEl.style.opacity = '0', 3000);
+}
+function setStatus(text, color='blue') {
+    const map = { blue:'text-blue-300', yellow:'text-yellow-400', green:'text-green-400', red:'text-red-400', orange:'text-orange-400' };
+    scanStatus.innerText = text;
+    scanStatus.className = `${map[color]||'text-blue-300'} mb-4 text-sm font-medium text-center min-h-5`;
+}
 
-        function updateStats() {
-            const conseguidas = albumData.filter(c => c.enInventario).length;
-            const repetidas = albumData.reduce((sum, c) => sum + c.repetidas, 0);
-            document.getElementById('progressCount').innerText = `${conseguidas} / ${albumData.length}`;
-            document.getElementById('duplicatesCount').innerText = repetidas;
-        }
-
-        // ─── Filtros y tarjetas ───────────────────────────────────────────────────
-
-        function renderGroupFilters() {
-            groupFiltersContainer.innerHTML = '';
-            uniqueGroups.forEach(grupo => {
-                const btn = document.createElement('button');
-                btn.className = `snap-start whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors border-2 ${currentGroupFilter === grupo ? 'bg-blue-100 text-blue-900 border-blue-200 shadow-sm' : 'bg-transparent text-blue-100 border-transparent hover:bg-blue-700'}`;
-                btn.innerText = grupo;
-                btn.onclick = () => { currentGroupFilter = grupo; currentCountryFilter = 'Todos'; renderGroupFilters(); updateCountryFiltersList(); renderCountryFilters(); filterCards(); };
-                groupFiltersContainer.appendChild(btn);
-            });
-        }
-
-        function renderCountryFilters() {
-            countryFiltersContainer.innerHTML = '';
-            if (currentGroupFilter === 'Todos' || uniqueCountries.length <= 2) { countryFiltersWrapper.classList.add('hidden'); return; }
-            countryFiltersWrapper.classList.remove('hidden');
-            uniqueCountries.forEach(pais => {
-                const btn = document.createElement('button');
-                btn.className = `snap-start whitespace-nowrap px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${currentCountryFilter === pais ? 'bg-orange-500 text-white border-orange-400 shadow-sm' : 'bg-transparent text-slate-300 border-transparent hover:bg-slate-700'}`;
-                btn.innerText = pais;
-                btn.onclick = () => { currentCountryFilter = pais; renderCountryFilters(); filterCards(); };
-                countryFiltersContainer.appendChild(btn);
-            });
-        }
-
-        function filterCards() {
-            const term = quitarAcentos(searchInput.value);
-            const filtered = albumData.filter(card => {
-                const desc = quitarAcentos(card.descripcion);
-                const cod = quitarAcentos(card.codigo);
-                const paisText = quitarAcentos(card.pais);
-                const matchesSearch = desc.includes(term) || cod.includes(term) || paisText.includes(term);
-                const matchesGroup = currentGroupFilter === 'Todos' || card.grupo === currentGroupFilter;
-                const matchesCountry = currentCountryFilter === 'Todos' || card.pais === currentCountryFilter;
-                return matchesSearch && matchesGroup && matchesCountry;
-            });
-            renderCards(filtered);
-        }
-
-        searchInput.addEventListener('input', filterCards);
-
-        function renderCards(dataToRender) {
-            cardsContainer.innerHTML = '';
-            const displayData = dataToRender.slice(0, 100);
-            displayData.forEach((card) => {
-                const realIndex = albumData.findIndex(c => c.codigo === card.codigo);
-                const cardEl = document.createElement('div');
-                cardEl.className = `p-4 rounded-lg border-2 shadow-sm flex items-center justify-between transition-colors ${card.enInventario ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200'}`;
-                cardEl.innerHTML = `
-                    <div class="flex-1 cursor-pointer" onclick="toggleInventario(${realIndex})">
-                        <div class="flex items-center gap-2">
-                            <span class="font-bold text-lg ${card.enInventario ? 'text-blue-700' : 'text-gray-700'}">${card.codigo}</span>
-                            <span class="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded-full font-semibold">${card.pais}</span>
-                        </div>
-                        <p class="text-sm text-gray-600 mt-1 font-medium">${card.descripcion}</p>
-                    </div>
-                    <div class="flex items-center gap-3 ml-2">
-                        <button onclick="toggleInventario(${realIndex})" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors ${card.enInventario ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-400'}">
-                            <i class="fa-solid fa-check"></i>
-                        </button>
-                        <div class="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
-                            <button onclick="updateRepetidas(${realIndex}, -1)" class="w-7 h-7 text-gray-600 hover:bg-gray-200 rounded flex items-center justify-center">
-                                <i class="fa-solid fa-minus text-xs"></i>
-                            </button>
-                            <span class="w-6 text-center font-bold text-sm text-orange-600">${card.repetidas}</span>
-                            <button onclick="updateRepetidas(${realIndex}, 1)" class="w-7 h-7 text-gray-600 hover:bg-gray-200 rounded flex items-center justify-center">
-                                <i class="fa-solid fa-plus text-xs"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-                cardsContainer.appendChild(cardEl);
-            });
-        }
-
-        window.toggleInventario = function(index) {
-            albumData[index].enInventario = !albumData[index].enInventario;
-            if (!albumData[index].enInventario) albumData[index].repetidas = 0;
-            saveData(); filterCards();
-        };
-
-        window.updateRepetidas = function(index, change) {
-            let newVal = albumData[index].repetidas + change;
-            if (newVal < 0) newVal = 0;
-            if (newVal > 0 && !albumData[index].enInventario) albumData[index].enInventario = true;
-            albumData[index].repetidas = newVal;
-            saveData(); filterCards();
-        };
-
-        // ─── CÁMARA MEJORADA ─────────────────────────────────────────────────────
-
-        async function openScanner() {
-            scannerModal.classList.remove('hidden');
-            previewContainer.classList.add('hidden');
-            pendingCanvas = null;
-            scanStatus.innerText = "Centra la figurita y toca para enfocar";
-            scanStatus.className = "text-blue-300 mb-4 text-sm font-medium h-5 text-center";
-            captureBtn.disabled = false;
-            captureBtn.classList.remove('opacity-50');
-            isFlashOn = false;
-            flashIcon.className = "fa-solid fa-bolt-slash";
-
-            try {
-                // Pedir cámara trasera principal con resolución alta
-                // facingMode: { exact: 'environment' } fuerza la trasera principal en la mayoría de dispositivos
-                const constraints = {
-                    video: {
-                        facingMode: { exact: 'environment' },
-                        width:  { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    }
-                };
-
-                try {
-                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-                } catch (exactErr) {
-                    // Fallback: si 'exact' falla (algunos navegadores de escritorio), intentar sin exact
-                    console.warn("Exact facingMode falló, usando fallback:", exactErr);
-                    mediaStream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
-                    });
-                }
-
-                cameraFeed.srcObject = mediaStream;
-
-                // Esperar a que el video esté listo, luego activar autofocus continuo
-                cameraFeed.onloadedmetadata = async () => {
-                    const track = mediaStream.getVideoTracks()[0];
-                    const caps = track.getCapabilities();
-
-                    // Intentar zoom=1 para evitar ultra-wide si el dispositivo lo permite
-                    try {
-                        const advancedConstraints = [];
-                        if (caps.zoom) advancedConstraints.push({ zoom: caps.zoom.min || 1 });
-                        if (caps.focusMode && caps.focusMode.includes('continuous')) {
-                            advancedConstraints.push({ focusMode: 'continuous' });
-                        }
-                        if (advancedConstraints.length > 0) {
-                            await track.applyConstraints({ advanced: advancedConstraints });
-                        }
-                    } catch (e) {
-                        console.warn("No se pudieron aplicar constraints avanzados:", e);
-                    }
-                };
-
-            } catch (err) {
-                console.error(err);
-                scanStatus.innerText = "Permiso de cámara denegado o no disponible.";
-                scanStatus.className = "text-red-400 mb-4 text-sm font-bold h-5 text-center";
-            }
-        }
-
-        function closeScanner() {
-            scannerModal.classList.add('hidden');
-            previewContainer.classList.add('hidden');
-            pendingCanvas = null;
-            if (mediaStream) {
-                if (isFlashOn) {
-                    const track = mediaStream.getVideoTracks()[0];
-                    track.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
-                    isFlashOn = false;
-                }
-                mediaStream.getTracks().forEach(track => track.stop());
-                mediaStream = null;
-            }
-        }
-
-        // Linterna
-        async function toggleFlash() {
-            if (!mediaStream) return;
-            const track = mediaStream.getVideoTracks()[0];
-            const caps = track.getCapabilities();
-
-            if (caps.torch) {
-                isFlashOn = !isFlashOn;
-                try {
-                    await track.applyConstraints({ advanced: [{ torch: isFlashOn }] });
-                    flashIcon.className = isFlashOn ? "fa-solid fa-bolt text-yellow-400" : "fa-solid fa-bolt-slash";
-                } catch (err) {
-                    console.error("Error al activar flash:", err);
-                }
-            } else {
-                setStatus("Flash no compatible en este dispositivo", "orange");
-                setTimeout(() => setStatus("Centra la figurita y toca para enfocar", "blue"), 3000);
-            }
-        }
-
-        // Enfoque táctil mejorado con pointsOfInterest
-        cameraArea.addEventListener('click', async (e) => {
-            // Ignorar clics dentro del previewContainer
-            if (!mediaStream || !previewContainer.classList.contains('hidden') === false) return;
-
-            const rect = cameraArea.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-
-            // Anillo visual — posicionado con transform translate para centrar
-            focusRing.style.left = `${x}px`;
-            focusRing.style.top  = `${y}px`;
-            focusRing.style.transform = 'translate(-50%, -50%)';
-            focusRing.classList.remove('hidden', 'animate-focus');
-            void focusRing.offsetWidth; // forzar reflow
-            focusRing.classList.add('animate-focus');
-            setTimeout(() => focusRing.classList.add('hidden'), 850);
-
-            // Intentar enfocar en ese punto
-            const track = mediaStream.getVideoTracks()[0];
-            const caps  = track.getCapabilities();
-
-            const px = x / rect.width;
-            const py = y / rect.height;
-
-            try {
-                if (caps.pointsOfInterest) {
-                    // API más precisa para enfocar en un punto concreto
-                    await track.applyConstraints({
-                        advanced: [{ pointsOfInterest: [{ x: px, y: py }], focusMode: 'manual' }]
-                    });
-                    // Volver a continuo después de 1.5s
-                    setTimeout(async () => {
-                        try {
-                            await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-                        } catch (e) {}
-                    }, 1500);
-                } else if (caps.focusMode && caps.focusMode.includes('continuous')) {
-                    await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-                }
-            } catch (err) {
-                console.warn("Autofocus no disponible:", err);
+// ─── Datos ────────────────────────────────────────────────────────────────────
+async function init() {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) { albumData = JSON.parse(stored); extractGroups(); showApp(); return; }
+    try {
+        const r = await fetch('data.csv');
+        if (!r.ok) throw new Error();
+        const csv = await r.text();
+        Papa.parse(csv, {
+            header: true, skipEmptyLines: true,
+            complete: ({ data }) => {
+                albumData = data.map(row => ({
+                    codigo:      row['Código'],
+                    pais:        row['Categoría / Pais'],
+                    descripcion: row['Descripción'],
+                    enInventario: row['En Inventario']==='TRUE'||row['En Inventario']==='True'||false,
+                    repetidas:   parseInt(row['Repetidas'])||0,
+                    grupo:       row['Grupos']||'Otros'
+                }));
+                extractGroups(); saveData(); showApp();
             }
         });
+    } catch { loadingSection.innerHTML = `<p class="text-red-600 font-bold">Error al leer data.csv</p>`; }
+}
+function extractGroups() {
+    uniqueGroups = ['Todos', ...new Set(albumData.map(i=>i.grupo).filter(Boolean))];
+}
+function updateCountryList() {
+    const src = currentGroupFilter!=='Todos' ? albumData.filter(i=>i.grupo===currentGroupFilter) : albumData;
+    uniqueCountries = ['Todos', ...new Set(src.map(i=>i.pais).filter(Boolean))];
+    if (!uniqueCountries.includes(currentCountryFilter)) currentCountryFilter='Todos';
+}
+function saveData()  { localStorage.setItem(STORAGE_KEY, JSON.stringify(albumData)); updateStats(); }
+function updateStats() {
+    const got = albumData.filter(c=>c.enInventario).length;
+    const rep = albumData.reduce((s,c)=>s+c.repetidas,0);
+    document.getElementById('progressCount').innerText  = `${got} / ${albumData.length}`;
+    document.getElementById('duplicatesCount').innerText = rep;
+}
+function showApp() {
+    loadingSection.classList.add('hidden');
+    statsSection.classList.remove('hidden');
+    statsSection.classList.add('grid');
+    renderGroupFilters(); updateCountryList(); renderCountryFilters(); filterCards(); updateStats();
+}
 
-        // Captura y muestra preview antes de OCR
-        function captureForPreview() {
-            if (!mediaStream) return;
+// ─── Filtros y tarjetas ────────────────────────────────────────────────────────
+function renderGroupFilters() {
+    groupFiltersEl.innerHTML='';
+    uniqueGroups.forEach(g => {
+        const b = document.createElement('button');
+        b.className=`snap-start whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors border-2 ${currentGroupFilter===g?'bg-blue-100 text-blue-900 border-blue-200 shadow-sm':'bg-transparent text-blue-100 border-transparent hover:bg-blue-700'}`;
+        b.innerText=g;
+        b.onclick=()=>{currentGroupFilter=g;currentCountryFilter='Todos';renderGroupFilters();updateCountryList();renderCountryFilters();filterCards();};
+        groupFiltersEl.appendChild(b);
+    });
+}
+function renderCountryFilters() {
+    countryFiltersEl.innerHTML='';
+    if (currentGroupFilter==='Todos'||uniqueCountries.length<=2){countryFiltersWrap.classList.add('hidden');return;}
+    countryFiltersWrap.classList.remove('hidden');
+    uniqueCountries.forEach(p=>{
+        const b=document.createElement('button');
+        b.className=`snap-start whitespace-nowrap px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${currentCountryFilter===p?'bg-orange-500 text-white border-orange-400 shadow-sm':'bg-transparent text-slate-300 border-transparent hover:bg-slate-700'}`;
+        b.innerText=p;
+        b.onclick=()=>{currentCountryFilter=p;renderCountryFilters();filterCards();};
+        countryFiltersEl.appendChild(b);
+    });
+}
+function filterCards() {
+    const term=quitarAcentos(searchInput.value);
+    const f=albumData.filter(c=>{
+        const d=quitarAcentos(c.descripcion), cod=quitarAcentos(c.codigo), pt=quitarAcentos(c.pais);
+        return (d.includes(term)||cod.includes(term)||pt.includes(term))
+            && (currentGroupFilter==='Todos'||c.grupo===currentGroupFilter)
+            && (currentCountryFilter==='Todos'||c.pais===currentCountryFilter);
+    });
+    renderCards(f);
+}
+searchInput.addEventListener('input',filterCards);
+function renderCards(data) {
+    cardsContainer.innerHTML='';
+    data.slice(0,100).forEach(card=>{
+        const ri=albumData.findIndex(c=>c.codigo===card.codigo);
+        const el=document.createElement('div');
+        el.className=`p-4 rounded-lg border-2 shadow-sm flex items-center justify-between transition-colors ${card.enInventario?'bg-blue-50 border-blue-300':'bg-white border-gray-200'}`;
+        el.innerHTML=`
+            <div class="flex-1 cursor-pointer" onclick="toggleInventario(${ri})">
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-lg ${card.enInventario?'text-blue-700':'text-gray-700'}">${card.codigo}</span>
+                    <span class="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded-full font-semibold">${card.pais}</span>
+                </div>
+                <p class="text-sm text-gray-600 mt-1 font-medium">${card.descripcion}</p>
+            </div>
+            <div class="flex items-center gap-3 ml-2">
+                <button onclick="toggleInventario(${ri})" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors ${card.enInventario?'bg-blue-500 text-white shadow-md':'bg-gray-200 text-gray-400'}">
+                    <i class="fa-solid fa-check"></i>
+                </button>
+                <div class="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
+                    <button onclick="updateRepetidas(${ri},-1)" class="w-7 h-7 text-gray-600 hover:bg-gray-200 rounded flex items-center justify-center"><i class="fa-solid fa-minus text-xs"></i></button>
+                    <span class="w-6 text-center font-bold text-sm text-orange-600">${card.repetidas}</span>
+                    <button onclick="updateRepetidas(${ri},1)" class="w-7 h-7 text-gray-600 hover:bg-gray-200 rounded flex items-center justify-center"><i class="fa-solid fa-plus text-xs"></i></button>
+                </div>
+            </div>`;
+        cardsContainer.appendChild(el);
+    });
+}
+window.toggleInventario = i => {
+    albumData[i].enInventario=!albumData[i].enInventario;
+    if(!albumData[i].enInventario) albumData[i].repetidas=0;
+    saveData(); filterCards();
+};
+window.updateRepetidas = (i,d) => {
+    let v=albumData[i].repetidas+d;
+    if(v<0) v=0;
+    if(v>0&&!albumData[i].enInventario) albumData[i].enInventario=true;
+    albumData[i].repetidas=v;
+    saveData(); filterCards();
+};
 
-            const vw = cameraFeed.videoWidth;
-            const vh = cameraFeed.videoHeight;
+// ─── CÁMARA ───────────────────────────────────────────────────────────────────
 
-            if (!vw || !vh) {
-                setStatus("La cámara aún no está lista, espera un momento", "orange");
-                return;
+async function openScanner() {
+    scannerModal.classList.remove('hidden');
+    scannerModal.classList.add('flex');
+    previewContainer.classList.add('hidden');
+    pendingCanvas = null;
+    currentZoom   = 1;
+    zoomSlider.value = 1;
+    zoomLabel.innerText = 'Zoom: 1×';
+    isFlashOn = false;
+    flashIcon.className = 'fa-solid fa-bolt-slash';
+    setStatus('Cargando cámara...', 'blue');
+
+    try {
+        // Pedimos la resolución más alta posible.
+        // Pedir 4K le dice al sistema que use el sensor principal (de mayor MP).
+        // Si el dispositivo no llega a 4K, el navegador baja automáticamente.
+        const constraints = {
+            video: {
+                facingMode: { ideal: 'environment' },
+                width:  { ideal: 3840 },
+                height: { ideal: 2160 }
             }
-
-            // Calcular el área del marco guía en coordenadas del vídeo
-            // El marco guía es 256×320 px en pantalla, centrado
-            const displayW = cameraArea.clientWidth;
-            const displayH = cameraArea.clientHeight;
-
-            // El vídeo se renderiza con object-cover, calcular la escala real
-            const videoAspect   = vw / vh;
-            const displayAspect = displayW / displayH;
-
-            let renderW, renderH, offsetX, offsetY;
-            if (videoAspect > displayAspect) {
-                renderH = displayH;
-                renderW = displayH * videoAspect;
-                offsetX = (renderW - displayW) / 2;
-                offsetY = 0;
-            } else {
-                renderW = displayW;
-                renderH = displayW / videoAspect;
-                offsetX = 0;
-                offsetY = (renderH - displayH) / 2;
-            }
-
-            const scaleX = vw / renderW;
-            const scaleY = vh / renderH;
-
-            // Marco guía: 256×320, centrado en pantalla
-            const guideW_display = 256;
-            const guideH_display = 320;
-            const guideCX = displayW / 2 - guideW_display / 2;
-            const guideCY = displayH / 2 - guideH_display / 2;
-
-            // Coordenadas en el vídeo
-            const srcX = (guideCX + offsetX) * scaleX;
-            const srcY = (guideCY + offsetY) * scaleY;
-            const srcW = guideW_display * scaleX;
-            const srcH = guideH_display * scaleY;
-
-            // Dibujar recorte en canvas con resolución 2× para mejor OCR
-            const scale = 2;
-            const canvas = document.createElement('canvas');
-            canvas.width  = srcW * scale;
-            canvas.height = srcH * scale;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(cameraFeed, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
-
-            pendingCanvas = canvas;
-
-            // Mostrar preview
-            previewImg.src = canvas.toDataURL('image/jpeg', 0.9);
-            previewContainer.classList.remove('hidden');
-        }
-
-        // El usuario confirma que la imagen está nítida
-        window.confirmScan = function() {
-            if (!pendingCanvas) return;
-            previewContainer.classList.add('hidden');
-            runOCR(pendingCanvas);
-            pendingCanvas = null;
         };
 
-        // El usuario quiere reintentar
-        window.retryCapture = function() {
-            previewContainer.classList.add('hidden');
-            pendingCanvas = null;
-            setStatus("Centra la figurita y toca para enfocar", "blue");
-        };
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        cameraFeed.srcObject = mediaStream;
 
-        async function runOCR(canvas) {
-            captureBtn.disabled = true;
-            captureBtn.classList.add('opacity-50');
-            setStatus("Inicializando motor OCR...", "yellow");
+        await new Promise(res => { cameraFeed.onloadedmetadata = res; });
 
-            try {
-                const result = await Tesseract.recognize(canvas, 'spa', {
-                    logger: m => {
-                        if (m.status === 'recognizing text') {
-                            setStatus(`Analizando: ${Math.round(m.progress * 100)}%`, "yellow");
-                        }
-                    }
-                });
+        const track = mediaStream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        const caps     = track.getCapabilities();
 
-                const recognizedText = quitarAcentos(result.data.text);
-                procesarTextoEscaneado(recognizedText);
-            } catch (error) {
-                console.error("Error en OCR:", error);
-                setStatus("Error al analizar la imagen.", "red");
-            }
+        // Intentar zoom nativo si está disponible (Android Chrome principalmente)
+        if (caps.zoom && caps.zoom.max > 1) {
+            useNativeZoom  = true;
+            nativeZoomMin  = caps.zoom.min || 1;
+            nativeZoomMax  = Math.min(caps.zoom.max, 4);
+            zoomSlider.min  = nativeZoomMin;
+            zoomSlider.max  = nativeZoomMax;
+            zoomSlider.step = 0.1;
+        } else {
+            // Sin zoom nativo: usaremos recorte en canvas (zoom digital)
+            useNativeZoom  = false;
+            nativeZoomMin  = 1;
+            nativeZoomMax  = 4;
+            zoomSlider.min  = 1;
+            zoomSlider.max  = 4;
+            zoomSlider.step = 0.1;
+        }
+        currentZoom = nativeZoomMin;
+        zoomSlider.value = currentZoom;
+        zoomLabel.innerText = `Zoom: ${currentZoom.toFixed(1)}×`;
 
-            captureBtn.disabled = false;
-            captureBtn.classList.remove('opacity-50');
-            setTimeout(closeScanner, 2500);
+        // Autofocus continuo
+        if (caps.focusMode && caps.focusMode.includes('continuous')) {
+            try { await track.applyConstraints({ advanced:[{focusMode:'continuous'}] }); } catch(e){}
         }
 
-        function procesarTextoEscaneado(textoGuto) {
-            let encontrado = false;
-            const palabrasClave = textoGuto.split(/\s+/).filter(p => p.length > 2);
+        const vw = settings.width  || cameraFeed.videoWidth;
+        const vh = settings.height || cameraFeed.videoHeight;
+        setStatus(`Listo · ${vw}×${vh}`, 'green');
+        setTimeout(()=>setStatus('Acerca la figurita y pulsa la cámara','blue'), 2000);
 
-            for (let i = 0; i < albumData.length; i++) {
-                const card = albumData[i];
-                const cod  = quitarAcentos(card.codigo);
-                const desc = quitarAcentos(card.descripcion);
+    } catch(err) {
+        console.error(err);
+        setStatus('Permiso de cámara denegado.','red');
+    }
+}
 
-                if (textoGuto.includes(cod) || palabrasClave.some(palabra => desc.includes(palabra) && palabra.length > 4)) {
-                    if (!card.enInventario) {
-                        card.enInventario = true;
-                        saveData(); filterCards();
-                        showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`, true);
-                    } else {
-                        showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`, false);
-                    }
-                    encontrado = true;
-                    setStatus(`¡Encontrado: ${card.codigo}!`, "green");
-                    break;
-                }
-            }
+function closeScanner() {
+    if(isFlashOn) { toggleFlash(); }
+    if(mediaStream) { mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
+    scannerModal.classList.add('hidden');
+    scannerModal.classList.remove('flex');
+    previewContainer.classList.add('hidden');
+    pendingCanvas = null;
+}
 
-            if (!encontrado) {
-                setStatus("No se reconoció ninguna figurita.", "orange");
-                showToast("No se pudo identificar. Intenta buscarla manualmente.", false);
-            }
+// Zoom: nativo si está disponible, digital si no
+zoomSlider.addEventListener('input', async () => {
+    currentZoom = parseFloat(zoomSlider.value);
+    zoomLabel.innerText = `Zoom: ${currentZoom.toFixed(1)}×`;
+    if (useNativeZoom && mediaStream) {
+        const track = mediaStream.getVideoTracks()[0];
+        try { await track.applyConstraints({ advanced:[{ zoom: currentZoom }] }); } catch(e){}
+    }
+    // Si no hay zoom nativo, el recorte se aplica en captureForPreview()
+});
+
+// Linterna
+async function toggleFlash() {
+    if(!mediaStream) return;
+    const track = mediaStream.getVideoTracks()[0];
+    const caps  = track.getCapabilities();
+    if(caps.torch) {
+        isFlashOn=!isFlashOn;
+        try {
+            await track.applyConstraints({advanced:[{torch:isFlashOn}]});
+            flashIcon.className = isFlashOn ? 'fa-solid fa-bolt text-yellow-400' : 'fa-solid fa-bolt-slash';
+        } catch(e){ console.error(e); }
+    } else {
+        setStatus('Flash no compatible en este dispositivo','orange');
+        setTimeout(()=>setStatus('Acerca la figurita y pulsa la cámara','blue'),3000);
+    }
+}
+
+// Enfoque táctil
+cameraArea.addEventListener('click', async e => {
+    if(!mediaStream || !previewContainer.classList.contains('hidden')===false) return;
+
+    const rect = cameraArea.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Anillo visual
+    focusRing.style.left = `${x}px`;
+    focusRing.style.top  = `${y}px`;
+    focusRing.style.transform = 'translate(-50%,-50%) scale(1.4)';
+    focusRing.classList.remove('active');
+    void focusRing.offsetWidth;
+    focusRing.classList.add('active');
+    setTimeout(()=>focusRing.classList.remove('active'), 750);
+
+    const track = mediaStream.getVideoTracks()[0];
+    const caps  = track.getCapabilities();
+    const px = x / rect.width;
+    const py = y / rect.height;
+
+    try {
+        if(caps.pointsOfInterest) {
+            await track.applyConstraints({ advanced:[{ pointsOfInterest:[{x:px,y:py}], focusMode:'manual' }] });
+            setTimeout(async()=>{
+                try{ await track.applyConstraints({advanced:[{focusMode:'continuous'}]}); }catch(e){}
+            }, 1500);
+        } else if(caps.focusMode && caps.focusMode.includes('continuous')) {
+            await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
         }
+    } catch(e){ console.warn('Focus error:',e); }
+});
 
-        function setStatus(text, color) {
-            const colors = {
-                blue:   "text-blue-300",
-                yellow: "text-yellow-400 animate-pulse",
-                green:  "text-green-400",
-                red:    "text-red-400",
-                orange: "text-orange-400"
-            };
-            scanStatus.innerText = text;
-            scanStatus.className = `${colors[color] || 'text-blue-300'} mb-4 text-sm font-medium h-5 text-center`;
+// ─── Captura con zoom digital en canvas ───────────────────────────────────────
+
+function captureForPreview() {
+    if(!mediaStream) return;
+    const vw = cameraFeed.videoWidth;
+    const vh = cameraFeed.videoHeight;
+    if(!vw || !vh) { setStatus('La cámara aún no está lista','orange'); return; }
+
+    // --- Calcular región del marco guía en coords del sensor ---
+    const displayW = cameraArea.clientWidth;
+    const displayH = cameraArea.clientHeight;
+    const videoAspect   = vw/vh;
+    const displayAspect = displayW/displayH;
+    let renderW, renderH, offsetX=0, offsetY=0;
+    if(videoAspect > displayAspect){
+        renderH=displayH; renderW=displayH*videoAspect;
+        offsetX=(renderW-displayW)/2;
+    } else {
+        renderW=displayW; renderH=displayW/videoAspect;
+        offsetY=(renderH-displayH)/2;
+    }
+    const scaleX = vw/renderW;
+    const scaleY = vh/renderH;
+
+    // Marco guía en pantalla: 256×320, centrado
+    const gW=256, gH=320;
+    const gX=(displayW-gW)/2;
+    const gY=(displayH-gH)/2;
+
+    // En coords del sensor (sin zoom)
+    let srcX = (gX+offsetX)*scaleX;
+    let srcY = (gY+offsetY)*scaleY;
+    let srcW = gW*scaleX;
+    let srcH = gH*scaleY;
+
+    // Aplicar zoom digital si no hay zoom nativo
+    // Zoom digital = recortar el centro por factor zoom
+    if(!useNativeZoom && currentZoom > 1) {
+        // Centro del marco en coords de sensor
+        const cx = srcX + srcW/2;
+        const cy = srcY + srcH/2;
+        srcW = srcW / currentZoom;
+        srcH = srcH / currentZoom;
+        srcX = cx - srcW/2;
+        srcY = cy - srcH/2;
+        // Asegurar dentro de los límites del vídeo
+        srcX = Math.max(0, Math.min(srcX, vw-srcW));
+        srcY = Math.max(0, Math.min(srcY, vh-srcH));
+    }
+
+    // Canvas de salida: 2× para mejor OCR
+    const outW = Math.round(srcW*2);
+    const outH = Math.round(srcH*2);
+    const canvas = document.createElement('canvas');
+    canvas.width  = outW;
+    canvas.height = outH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(cameraFeed, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
+
+    // Preprocesado para mejorar OCR: escala de grises + contraste
+    const imageData = ctx.getImageData(0,0,outW,outH);
+    const d = imageData.data;
+    for(let i=0;i<d.length;i+=4){
+        // Escala de grises (luminosidad perceptual)
+        const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+        // Contraste: curva S suave (no binarización dura para conservar detalle)
+        const c = clamp(((gray/255 - 0.5)*1.6 + 0.5)*255);
+        d[i]=d[i+1]=d[i+2]=c;
+    }
+    ctx.putImageData(imageData,0,0);
+
+    pendingCanvas = canvas;
+    previewImg.src = canvas.toDataURL('image/jpeg', 0.92);
+    previewContainer.classList.remove('hidden');
+}
+
+function clamp(v){ return Math.max(0,Math.min(255,Math.round(v))); }
+
+window.retryCapture = () => {
+    previewContainer.classList.add('hidden');
+    pendingCanvas = null;
+    setStatus('Acerca la figurita y pulsa la cámara','blue');
+};
+window.confirmScan = () => {
+    if(!pendingCanvas) return;
+    previewContainer.classList.add('hidden');
+    runOCR(pendingCanvas);
+    pendingCanvas = null;
+};
+
+async function runOCR(canvas) {
+    captureBtn.disabled=true; captureBtn.classList.add('opacity-50');
+    setStatus('Analizando imagen...','yellow');
+    try {
+        const result = await Tesseract.recognize(canvas, 'spa', {
+            logger: m => { if(m.status==='recognizing text') setStatus(`Leyendo: ${Math.round(m.progress*100)}%`,'yellow'); }
+        });
+        procesarTexto(quitarAcentos(result.data.text));
+    } catch(e) {
+        console.error(e);
+        setStatus('Error al analizar la imagen.','red');
+    }
+    captureBtn.disabled=false; captureBtn.classList.remove('opacity-50');
+    setTimeout(closeScanner, 2500);
+}
+
+function procesarTexto(texto) {
+    const palabras = texto.split(/\s+/).filter(p=>p.length>2);
+    for(let i=0;i<albumData.length;i++){
+        const card = albumData[i];
+        const cod  = quitarAcentos(card.codigo);
+        const desc = quitarAcentos(card.descripcion);
+        if(texto.includes(cod) || palabras.some(p=>desc.includes(p)&&p.length>4)){
+            if(!card.enInventario){ card.enInventario=true; saveData(); filterCards(); showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`,true); }
+            else { showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`,false); }
+            setStatus(`¡Encontrado: ${card.codigo}!`,'green');
+            return;
         }
+    }
+    setStatus('No se reconoció ninguna figurita.','orange');
+    showToast('No se pudo identificar. Búscala manualmente.',false);
+}
 
-        init();
-    </script>
+init();
+</script>
 </body>
 </html>
