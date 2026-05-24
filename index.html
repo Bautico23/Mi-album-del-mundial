@@ -8,7 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
+    
     <style>
         body { background-color: #f3f4f6; font-family: sans-serif; }
         ::-webkit-scrollbar { width: 6px; height: 4px; }
@@ -32,7 +32,7 @@
     <header class="bg-blue-900 text-white sticky top-0 z-50 shadow-md">
         <div class="p-4 pb-2">
             <h1 class="text-xl font-bold text-center mb-3">Mi Álbum Panini</h1>
-
+            
             <div class="relative flex gap-2">
                 <div class="relative flex-1">
                     <span class="absolute inset-y-0 left-0 flex items-center pl-3">
@@ -81,9 +81,6 @@
     </main>
 
     <div id="scannerModal" class="fixed inset-0 bg-black z-[100] hidden flex flex-col">
-        <div class="p-4 flex justify-between items-center text-white bg-black/50 absolute top-0 w-full z-10">
-            <h2 class="text-lg font-bold">Escanear Figurita</h2>
-            <button onclick="closeScanner()" class="text-white text-2xl"><i class="fa-solid fa-xmark"></i></button>
         <div class="p-4 flex justify-between items-center text-white bg-black/50 absolute top-0 w-full z-20">
             <button id="flashBtn" onclick="toggleFlash()" class="text-white text-2xl w-10 h-10 flex items-center justify-center bg-gray-800/60 rounded-full">
                 <i class="fa-solid fa-bolt-slash" id="flashIcon"></i>
@@ -93,21 +90,17 @@
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
-
-        <div class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+        
         <div id="cameraArea" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden cursor-crosshair">
             <video id="cameraFeed" autoplay playsinline class="object-cover w-full h-full"></video>
             
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div class="w-64 h-80 border-4 border-dashed border-white/70 rounded-lg"></div>
                 <div class="w-64 h-80 border-2 border-yellow-400/50 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
             </div>
 
             <div id="focusRing" class="absolute hidden w-16 h-16 border-2 border-yellow-400 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 z-10"></div>
         </div>
 
-        <div class="bg-gray-900 p-6 flex flex-col items-center">
-            <p id="scanStatus" class="text-blue-300 mb-4 text-sm font-medium h-5">Apunta al nombre o código de la figurita</p>
         <div class="bg-gray-900 p-6 flex flex-col items-center z-20">
             <p id="scanStatus" class="text-blue-300 mb-4 text-sm font-medium h-5">Apunta o toca la pantalla para enfocar</p>
             <button id="captureBtn" onclick="captureAndScan()" class="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center border-4 border-white shadow-lg active:scale-95 transition-transform">
@@ -124,7 +117,6 @@
         let currentGroupFilter = 'Todos';
         let currentCountryFilter = 'Todos';
 
-        // Elementos DOM
         const loadingSection = document.getElementById('loadingSection');
         const statsSection = document.getElementById('statsSection');
         const cardsContainer = document.getElementById('cardsContainer');
@@ -169,7 +161,7 @@
                     const response = await fetch('data.csv');
                     if (!response.ok) throw new Error('No data.csv');
                     const csvText = await response.text();
-
+                    
                     Papa.parse(csvText, {
                         header: true,
                         skipEmptyLines: true,
@@ -313,12 +305,10 @@
             saveData(); filterCards();
         };
 
-        // --- LÓGICA DE LA CÁMARA Y OCR ---
         // --- FUNCIONES MEJORADAS DE CÁMARA (LINTERNA Y ENFOQUE) ---
 
         async function openScanner() {
             scannerModal.classList.remove('hidden');
-            scanStatus.innerText = "Apunta al nombre o código de la figurita";
             scanStatus.innerText = "Apunta o toca la pantalla para enfocar";
             scanStatus.className = "text-blue-300 mb-4 text-sm font-medium h-5";
             captureBtn.disabled = false;
@@ -327,9 +317,7 @@
             flashIcon.className = "fa-solid fa-bolt-slash";
 
             try {
-                // Solicitar cámara trasera
                 mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment' } 
                     video: { facingMode: 'environment', advanced: [{ focusMode: "continuous" }] } 
                 });
                 cameraFeed.srcObject = mediaStream;
@@ -350,7 +338,6 @@
             }
         }
 
-        async function captureAndScan() {
         // Sistema de encendido de Linterna (Flash)
         async function toggleFlash() {
             if (!mediaStream) return;
@@ -390,7 +377,7 @@
             focusRing.style.left = `${x}px`;
             focusRing.style.top = `${y}px`;
             focusRing.classList.remove('hidden', 'animate-focus');
-
+            
             // Forzar reflow del DOM para reiniciar animación
             void focusRing.offsetWidth; 
             focusRing.classList.add('animate-focus');
@@ -412,18 +399,15 @@
             if (!mediaStream) return;
             captureBtn.disabled = true;
             captureBtn.classList.add('opacity-50');
-            scanStatus.innerText = "Capturando e inicializando motor (puede tardar)...";
             scanStatus.innerText = "Capturando e inicializando motor...";
             scanStatus.className = "text-yellow-400 mb-4 text-sm font-bold h-5 animate-pulse";
 
-            // Crear un canvas para tomar la foto del video
             const canvas = document.createElement('canvas');
             canvas.width = cameraFeed.videoWidth;
             canvas.height = cameraFeed.videoHeight;
             canvas.getContext('2d').drawImage(cameraFeed, 0, 0);
 
             try {
-                // Pasar la imagen a Tesseract
                 const result = await Tesseract.recognize(canvas, 'spa', {
                     logger: m => {
                         if (m.status === 'recognizing text') {
@@ -433,23 +417,17 @@
                 });
 
                 const recognizedText = quitarAcentos(result.data.text);
-                console.log("Texto detectado:", recognizedText);
                 procesarTextoEscaneado(recognizedText);
-                
             } catch (error) {
                 console.error("Error en OCR:", error);
                 scanStatus.innerText = "Error al analizar la imagen.";
                 scanStatus.className = "text-red-400 mb-4 text-sm font-bold h-5";
             }
-
-            setTimeout(closeScanner, 1500); // Cerrar después de mostrar el resultado brevemente
             setTimeout(closeScanner, 2000);
         }
 
         function procesarTextoEscaneado(textoGuto) {
             let encontrado = false;
-
-            // Limpiamos el texto un poco más para evitar basura del OCR
             const palabrasClave = textoGuto.split(/\s+/).filter(p => p.length > 2);
 
             for (let i = 0; i < albumData.length; i++) {
@@ -457,11 +435,8 @@
                 const cod = quitarAcentos(card.codigo);
                 const desc = quitarAcentos(card.descripcion);
 
-                // Comprobamos si el texto escaneado contiene el código exacto o gran parte del nombre
                 if (textoGuto.includes(cod) || palabrasClave.some(palabra => desc.includes(palabra) && palabra.length > 4)) {
-                    
                     if (!card.enInventario) {
-                        card.enInventario = true; // Se marca como la tuya usando tu lógica de base
                         card.enInventario = true; 
                         saveData();
                         filterCards();
@@ -477,7 +452,6 @@
             }
 
             if (!encontrado) {
-                scanStatus.innerText = "No se reconoció ninguna figurita con certeza.";
                 scanStatus.innerText = "No se reconoció ninguna figurita.";
                 scanStatus.className = "text-orange-400 mb-4 text-sm font-bold h-5";
                 showToast("No se pudo identificar la figurita. Intenta buscarla manualmente.", false);
