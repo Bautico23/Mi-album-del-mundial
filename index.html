@@ -85,6 +85,7 @@
             <p class="text-xl font-bold text-orange-500" id="duplicatesCount">0</p>
         </div>
     </div>
+    <div id="toastNotification" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 text-sm font-medium"></div>
     <div id="toastNotification" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 text-sm font-medium"></div>
     <div id="cardsContainer" class="grid gap-3"></div>
 </main>
@@ -109,6 +110,7 @@
     <!-- Área de cámara -->
     <div id="cameraArea" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
         <video id="cameraFeed" autoplay playsinline muted class="object-cover w-full h-full"></video>
+
         <!-- Marco guía -->
         <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div class="relative w-64 h-80 border-2 border-yellow-400/70 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]">
@@ -118,9 +120,12 @@
                 <div class="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-yellow-400 rounded-br"></div>
             </div>
         </div>
+
         <div id="focusRing"></div>
     </div>
 
+    <!-- Controles de zoom -->
+    <div class="bg-gray-900/90 px-4 pt-3 pb-1 z-20">
     <!-- Selector de cámara -->
     <div id="cameraSelectorBar" class="bg-gray-900/95 px-4 pt-3 pb-2 z-20 border-t border-gray-700">
         <p class="text-gray-400 text-xs text-center mb-2 font-semibold uppercase tracking-wide">Seleccionar cámara</p>
@@ -147,6 +152,7 @@
         </button>
     </div>
 
+    <!-- Preview para confirmar nitidez -->
     <!-- Preview -->
     <div id="previewContainer" class="hidden absolute inset-0 bg-black/85 flex flex-col items-center justify-center z-30 p-6">
         <p class="text-white font-semibold mb-3">¿La imagen se ve nítida?</p>
@@ -166,6 +172,18 @@
 // ─── Estado global ────────────────────────────────────────────────────────────
 const STORAGE_KEY = 'panini_album_data';
 let albumData = [];
+let uniqueGroups = [];
+let uniqueCountries = [];
+let currentGroupFilter = 'Todos';
+let currentCountryFilter = 'Todos';
+
+let mediaStream   = null;
+let isFlashOn     = false;
+let currentZoom   = 1;      // zoom digital aplicado en canvas
+let nativeZoomMin = 1;
+let nativeZoomMax = 1;
+let useNativeZoom = false;
+let pendingCanvas = null;
 let uniqueGroups = [], uniqueCountries = [];
 let currentGroupFilter = 'Todos', currentCountryFilter = 'Todos';
 
@@ -180,6 +198,25 @@ let availableCameras = [];   // [{ deviceId, label, facing, icon, res }]
 let selectedCameraId = null;
 
 // ─── DOM refs ────────────────────────────────────────────────────────────────
+const loadingSection      = document.getElementById('loadingSection');
+const statsSection        = document.getElementById('statsSection');
+const cardsContainer      = document.getElementById('cardsContainer');
+const searchInput         = document.getElementById('searchInput');
+const groupFiltersEl      = document.getElementById('groupFilters');
+const countryFiltersWrap  = document.getElementById('countryFiltersContainer');
+const countryFiltersEl    = document.getElementById('countryFilters');
+const toastEl             = document.getElementById('toastNotification');
+const scannerModal        = document.getElementById('scannerModal');
+const cameraFeed          = document.getElementById('cameraFeed');
+const cameraArea          = document.getElementById('cameraArea');
+const scanStatus          = document.getElementById('scanStatus');
+const captureBtn          = document.getElementById('captureBtn');
+const flashIcon           = document.getElementById('flashIcon');
+const focusRing           = document.getElementById('focusRing');
+const previewContainer    = document.getElementById('previewContainer');
+const previewImg          = document.getElementById('previewImg');
+const zoomSlider          = document.getElementById('zoomSlider');
+const zoomLabel           = document.getElementById('zoomLabel');
 const loadingSection     = document.getElementById('loadingSection');
 const statsSection       = document.getElementById('statsSection');
 const cardsContainer     = document.getElementById('cardsContainer');
@@ -224,14 +261,21 @@ async function init() {
     try {
         const r = await fetch('data.csv');
         if (!r.ok) throw new Error();
+        const csv = await r.text();
+        Papa.parse(csv, {
         Papa.parse(await r.text(), {
             header: true, skipEmptyLines: true,
             complete: ({ data }) => {
                 albumData = data.map(row => ({
+                    codigo:      row['Código'],
+                    pais:        row['Categoría / Pais'],
+                    descripcion: row['Descripción'],
                     codigo:       row['Código'],
                     pais:         row['Categoría / Pais'],
                     descripcion:  row['Descripción'],
                     enInventario: row['En Inventario']==='TRUE'||row['En Inventario']==='True'||false,
+                    repetidas:   parseInt(row['Repetidas'])||0,
+                    grupo:       row['Grupos']||'Otros'
                     repetidas:    parseInt(row['Repetidas'])||0,
                     grupo:        row['Grupos']||'Otros'
                 }));
@@ -266,6 +310,7 @@ function showApp() {
 function renderGroupFilters() {
     groupFiltersEl.innerHTML='';
     uniqueGroups.forEach(g => {
+        const b = document.createElement('button');
         const b=document.createElement('button');
         b.className=`snap-start whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors border-2 ${currentGroupFilter===g?'bg-blue-100 text-blue-900 border-blue-200 shadow-sm':'bg-transparent text-blue-100 border-transparent hover:bg-blue-700'}`;
         b.innerText=g;
@@ -288,8 +333,11 @@ function renderCountryFilters() {
 function filterCards() {
     const term=quitarAcentos(searchInput.value);
     const f=albumData.filter(c=>{
+        const d=quitarAcentos(c.descripcion), cod=quitarAcentos(c.codigo), pt=quitarAcentos(c.pais);
         const d=quitarAcentos(c.descripcion),cod=quitarAcentos(c.codigo),pt=quitarAcentos(c.pais);
         return (d.includes(term)||cod.includes(term)||pt.includes(term))
+            && (currentGroupFilter==='Todos'||c.grupo===currentGroupFilter)
+            && (currentCountryFilter==='Todos'||c.pais===currentCountryFilter);
             &&(currentGroupFilter==='Todos'||c.grupo===currentGroupFilter)
             &&(currentCountryFilter==='Todos'||c.pais===currentCountryFilter);
     });
@@ -329,13 +377,28 @@ window.toggleInventario = i => {
     saveData(); filterCards();
 };
 window.updateRepetidas = (i,d) => {
+    let v=albumData[i].repetidas+d;
+    if(v<0) v=0;
     let v=albumData[i].repetidas+d; if(v<0)v=0;
     if(v>0&&!albumData[i].enInventario) albumData[i].enInventario=true;
+    albumData[i].repetidas=v;
+    saveData(); filterCards();
     albumData[i].repetidas=v; saveData(); filterCards();
 };
 
 // ─── CÁMARA ───────────────────────────────────────────────────────────────────
 
+async function openScanner() {
+    scannerModal.classList.remove('hidden');
+    scannerModal.classList.add('flex');
+    previewContainer.classList.add('hidden');
+    pendingCanvas = null;
+    currentZoom   = 1;
+    zoomSlider.value = 1;
+    zoomLabel.innerText = 'Zoom: 1×';
+    isFlashOn = false;
+    flashIcon.className = 'fa-solid fa-bolt-slash';
+    setStatus('Cargando cámara...', 'blue');
 // Intenta detectar qué tipo de lente es cada cámara por su etiqueta
 function guessCameraInfo(label, index, facingMode) {
     const l = label.toLowerCase();
@@ -437,30 +500,58 @@ async function startCamera(deviceId) {
     }
 
     try {
+        // Pedimos la resolución más alta posible.
+        // Pedir 4K le dice al sistema que use el sensor principal (de mayor MP).
+        // Si el dispositivo no llega a 4K, el navegador baja automáticamente.
+        const constraints = {
         mediaStream = await navigator.mediaDevices.getUserMedia({
             video: {
+                facingMode: { ideal: 'environment' },
                 deviceId: { exact: deviceId },
                 width:  { ideal: 3840 },
                 height: { ideal: 2160 }
             }
+        };
+
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
         });
         cameraFeed.srcObject = mediaStream;
+
         await new Promise(res => { cameraFeed.onloadedmetadata = res; });
 
         const track = mediaStream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        const caps     = track.getCapabilities();
         const caps  = track.getCapabilities();
         const sets  = track.getSettings();
 
+        // Intentar zoom nativo si está disponible (Android Chrome principalmente)
         // Zoom nativo
         if (caps.zoom && caps.zoom.max > 1) {
+            useNativeZoom  = true;
+            nativeZoomMin  = caps.zoom.min || 1;
+            nativeZoomMax  = Math.min(caps.zoom.max, 4);
+            zoomSlider.min  = nativeZoomMin;
+            zoomSlider.max  = nativeZoomMax;
+            zoomSlider.step = 0.1;
             useNativeZoom = true;
             zoomSlider.min  = caps.zoom.min || 1;
             zoomSlider.max  = Math.min(caps.zoom.max, 4);
         } else {
+            // Sin zoom nativo: usaremos recorte en canvas (zoom digital)
+            useNativeZoom  = false;
+            nativeZoomMin  = 1;
+            nativeZoomMax  = 4;
+            zoomSlider.min  = 1;
+            zoomSlider.max  = 4;
+            zoomSlider.step = 0.1;
             useNativeZoom = false;
             zoomSlider.min = 1;
             zoomSlider.max = 4;
         }
+        currentZoom = nativeZoomMin;
+        zoomSlider.value = currentZoom;
+        zoomLabel.innerText = `Zoom: ${currentZoom.toFixed(1)}×`;
         currentZoom = 1;
         zoomSlider.value = 1;
         zoomLabel.innerText = 'Zoom: 1×';
@@ -470,6 +561,10 @@ async function startCamera(deviceId) {
             try { await track.applyConstraints({ advanced:[{focusMode:'continuous'}] }); } catch(e){}
         }
 
+        const vw = settings.width  || cameraFeed.videoWidth;
+        const vh = settings.height || cameraFeed.videoHeight;
+        setStatus(`Listo · ${vw}×${vh}`, 'green');
+        setTimeout(()=>setStatus('Acerca la figurita y pulsa la cámara','blue'), 2000);
         const vw = sets.width  || cameraFeed.videoWidth;
         const vh = sets.height || cameraFeed.videoHeight;
         const camName = availableCameras.find(c=>c.deviceId===deviceId)?.name || 'Cámara';
@@ -478,6 +573,7 @@ async function startCamera(deviceId) {
 
     } catch(err) {
         console.error(err);
+        setStatus('Permiso de cámara denegado.','red');
         setStatus('No se pudo abrir esta cámara.', 'red');
     }
 }
@@ -495,6 +591,8 @@ async function openScanner() {
 }
 
 function closeScanner() {
+    if(isFlashOn) { toggleFlash(); }
+    if(mediaStream) { mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
     if (isFlashOn) toggleFlash();
     if (mediaStream) { mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
     scannerModal.classList.add('hidden');
@@ -503,25 +601,34 @@ function closeScanner() {
     pendingCanvas = null;
 }
 
+// Zoom: nativo si está disponible, digital si no
 // Zoom slider
 zoomSlider.addEventListener('input', async () => {
     currentZoom = parseFloat(zoomSlider.value);
     zoomLabel.innerText = `Zoom: ${currentZoom.toFixed(1)}×`;
     if (useNativeZoom && mediaStream) {
+        const track = mediaStream.getVideoTracks()[0];
+        try { await track.applyConstraints({ advanced:[{ zoom: currentZoom }] }); } catch(e){}
         try { await mediaStream.getVideoTracks()[0].applyConstraints({ advanced:[{zoom:currentZoom}] }); } catch(e){}
     }
+    // Si no hay zoom nativo, el recorte se aplica en captureForPreview()
 });
 
 // Linterna
 async function toggleFlash() {
+    if(!mediaStream) return;
     if (!mediaStream) return;
     const track = mediaStream.getVideoTracks()[0];
     const caps  = track.getCapabilities();
+    if(caps.torch) {
+        isFlashOn=!isFlashOn;
     if (caps.torch) {
         isFlashOn = !isFlashOn;
         try {
+            await track.applyConstraints({advanced:[{torch:isFlashOn}]});
             await track.applyConstraints({ advanced:[{torch:isFlashOn}] });
             flashIcon.className = isFlashOn ? 'fa-solid fa-bolt text-yellow-400' : 'fa-solid fa-bolt-slash';
+        } catch(e){ console.error(e); }
         } catch(e) { console.error(e); }
     } else {
         setStatus('Flash no compatible en este dispositivo','orange');
@@ -531,32 +638,96 @@ async function toggleFlash() {
 
 // Enfoque táctil
 cameraArea.addEventListener('click', async e => {
+    if(!mediaStream || !previewContainer.classList.contains('hidden')===false) return;
+
     if (!mediaStream || !previewContainer.classList.contains('hidden')) return;
     const rect = cameraArea.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
 
+    // Anillo visual
     focusRing.style.left = `${x}px`;
     focusRing.style.top  = `${y}px`;
+    focusRing.style.transform = 'translate(-50%,-50%) scale(1.4)';
     focusRing.classList.remove('active');
     void focusRing.offsetWidth;
     focusRing.classList.add('active');
+    setTimeout(()=>focusRing.classList.remove('active'), 750);
     setTimeout(()=>focusRing.classList.remove('active'),750);
 
     const track = mediaStream.getVideoTracks()[0];
     const caps  = track.getCapabilities();
+    const px = x / rect.width;
+    const py = y / rect.height;
+
     const px = x/rect.width, py = y/rect.height;
     try {
+        if(caps.pointsOfInterest) {
+            await track.applyConstraints({ advanced:[{ pointsOfInterest:[{x:px,y:py}], focusMode:'manual' }] });
+            setTimeout(async()=>{
+                try{ await track.applyConstraints({advanced:[{focusMode:'continuous'}]}); }catch(e){}
+            }, 1500);
+        } else if(caps.focusMode && caps.focusMode.includes('continuous')) {
         if (caps.pointsOfInterest) {
             await track.applyConstraints({ advanced:[{pointsOfInterest:[{x:px,y:py}],focusMode:'manual'}] });
             setTimeout(async()=>{ try{ await track.applyConstraints({advanced:[{focusMode:'continuous'}]}); }catch(e){} },1500);
         } else if (caps.focusMode && caps.focusMode.includes('continuous')) {
             await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
         }
+    } catch(e){ console.warn('Focus error:',e); }
     } catch(e) { console.warn('Focus:',e); }
 });
 
+// ─── Captura con zoom digital en canvas ───────────────────────────────────────
+
 // ─── Captura ──────────────────────────────────────────────────────────────────
 function captureForPreview() {
+    if(!mediaStream) return;
+    const vw = cameraFeed.videoWidth;
+    const vh = cameraFeed.videoHeight;
+    if(!vw || !vh) { setStatus('La cámara aún no está lista','orange'); return; }
+
+    // --- Calcular región del marco guía en coords del sensor ---
+    const displayW = cameraArea.clientWidth;
+    const displayH = cameraArea.clientHeight;
+    const videoAspect   = vw/vh;
+    const displayAspect = displayW/displayH;
+    let renderW, renderH, offsetX=0, offsetY=0;
+    if(videoAspect > displayAspect){
+        renderH=displayH; renderW=displayH*videoAspect;
+        offsetX=(renderW-displayW)/2;
+    } else {
+        renderW=displayW; renderH=displayW/videoAspect;
+        offsetY=(renderH-displayH)/2;
+    }
+    const scaleX = vw/renderW;
+    const scaleY = vh/renderH;
+
+    // Marco guía en pantalla: 256×320, centrado
+    const gW=256, gH=320;
+    const gX=(displayW-gW)/2;
+    const gY=(displayH-gH)/2;
+
+    // En coords del sensor (sin zoom)
+    let srcX = (gX+offsetX)*scaleX;
+    let srcY = (gY+offsetY)*scaleY;
+    let srcW = gW*scaleX;
+    let srcH = gH*scaleY;
+
+    // Aplicar zoom digital si no hay zoom nativo
+    // Zoom digital = recortar el centro por factor zoom
+    if(!useNativeZoom && currentZoom > 1) {
+        // Centro del marco en coords de sensor
+        const cx = srcX + srcW/2;
+        const cy = srcY + srcH/2;
+        srcW = srcW / currentZoom;
+        srcH = srcH / currentZoom;
+        srcX = cx - srcW/2;
+        srcY = cy - srcH/2;
+        // Asegurar dentro de los límites del vídeo
+        srcX = Math.max(0, Math.min(srcX, vw-srcW));
+        srcY = Math.max(0, Math.min(srcY, vh-srcH));
     if (!mediaStream) return;
     const vw=cameraFeed.videoWidth, vh=cameraFeed.videoHeight;
     if (!vw||!vh){ setStatus('La cámara aún no está lista','orange'); return; }
@@ -581,6 +752,18 @@ function captureForPreview() {
         srcY=Math.max(0,Math.min(cy-srcH/2,vh-srcH));
     }
 
+    // Canvas de salida: 2× para mejor OCR
+    const outW = Math.round(srcW*2);
+    const outH = Math.round(srcH*2);
+    const canvas = document.createElement('canvas');
+    canvas.width  = outW;
+    canvas.height = outH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(cameraFeed, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
+
+    // Preprocesado para mejorar OCR: escala de grises + contraste
+    const imageData = ctx.getImageData(0,0,outW,outH);
+    const d = imageData.data;
     const outW=Math.round(srcW*2), outH=Math.round(srcH*2);
     const canvas=document.createElement('canvas');
     canvas.width=outW; canvas.height=outH;
@@ -590,12 +773,19 @@ function captureForPreview() {
     // Preprocesado: escala de grises + contraste
     const img=ctx.getImageData(0,0,outW,outH), d=img.data;
     for(let i=0;i<d.length;i+=4){
+        // Escala de grises (luminosidad perceptual)
+        const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+        // Contraste: curva S suave (no binarización dura para conservar detalle)
+        const c = clamp(((gray/255 - 0.5)*1.6 + 0.5)*255);
         const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
         const c=clamp(((g/255-0.5)*1.6+0.5)*255);
         d[i]=d[i+1]=d[i+2]=c;
     }
+    ctx.putImageData(imageData,0,0);
     ctx.putImageData(img,0,0);
 
+    pendingCanvas = canvas;
+    previewImg.src = canvas.toDataURL('image/jpeg', 0.92);
     pendingCanvas=canvas;
     previewImg.src=canvas.toDataURL('image/jpeg',0.92);
     previewContainer.classList.remove('hidden');
@@ -605,6 +795,7 @@ function clamp(v){ return Math.max(0,Math.min(255,Math.round(v))); }
 
 window.retryCapture = () => {
     previewContainer.classList.add('hidden');
+    pendingCanvas = null;
     pendingCanvas=null;
     setStatus('Acerca la figurita y pulsa la cámara','blue');
 };
@@ -612,6 +803,7 @@ window.confirmScan = () => {
     if(!pendingCanvas) return;
     previewContainer.classList.add('hidden');
     runOCR(pendingCanvas);
+    pendingCanvas = null;
     pendingCanvas=null;
 };
 
@@ -713,6 +905,28 @@ function procesarTexto(textoCrudo) {
         setStatus('No se reconoció el código.', 'orange');
         showToast('Apunta directamente al código (Ej: ARG-10)', false);
     }
+}
+
+function procesarTexto(texto) {
+    const palabras = texto.split(/\s+/).filter(p=>p.length>2);
+    const palabras=texto.split(/\s+/).filter(p=>p.length>2);
+    for(let i=0;i<albumData.length;i++){
+        const card = albumData[i];
+        const cod  = quitarAcentos(card.codigo);
+        const desc = quitarAcentos(card.descripcion);
+        if(texto.includes(cod) || palabras.some(p=>desc.includes(p)&&p.length>4)){
+        const card=albumData[i];
+        const cod=quitarAcentos(card.codigo), desc=quitarAcentos(card.descripcion);
+        if(texto.includes(cod)||palabras.some(p=>desc.includes(p)&&p.length>4)){
+            if(!card.enInventario){ card.enInventario=true; saveData(); filterCards(); showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`,true); }
+            else { showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`,false); }
+            else showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`,false);
+            setStatus(`¡Encontrado: ${card.codigo}!`,'green');
+            return;
+        }
+    }
+    setStatus('No se reconoció ninguna figurita.','orange');
+    showToast('No se pudo identificar. Búscala manualmente.',false);
 }
 
 init();
