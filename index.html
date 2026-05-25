@@ -1,735 +1,823 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Álbum Panini - Control de Figuritas</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <style>
-        body { background-color: #f3f4f6; font-family: sans-serif; }
-        ::-webkit-scrollbar { width: 6px; height: 4px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes focusPulse {
-            0%   { transform: translate(-50%,-50%) scale(1.4); opacity: 1; }
-            100% { transform: translate(-50%,-50%) scale(1);   opacity: 0; }
-        }
-        #focusRing {
-            position: absolute;
-            width: 60px; height: 60px;
-            border: 2px solid #FBBF24;
-            border-radius: 4px;
-            pointer-events: none;
-            display: none;
-        }
-        #focusRing.active { display: block; animation: focusPulse 0.7s ease-out forwards; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Mi Álbum · Mundial 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
-        /* Selector de cámara */
-        .cam-btn {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            gap: 6px; padding: 12px 10px; border-radius: 12px; border: 2px solid #374151;
-            background: #1f2937; color: #d1d5db; cursor: pointer; transition: all 0.15s;
-            min-width: 80px; flex: 1;
-        }
-        .cam-btn:active { transform: scale(0.96); }
-        .cam-btn.selected { border-color: #3b82f6; background: #1d4ed8; color: #fff; }
-        .cam-btn .cam-icon { font-size: 22px; }
-        .cam-btn .cam-label { font-size: 11px; font-weight: 600; text-align: center; line-height: 1.2; }
-        .cam-btn .cam-res { font-size: 10px; color: #9ca3af; margin-top: 2px; }
-        .cam-btn.selected .cam-res { color: #bfdbfe; }
-    </style>
+<style>
+/* ── Tokens ─────────────────────────────────────────────────────────────── */
+:root {
+  --navy:    #0b1120;
+  --navy2:   #111827;
+  --navy3:   #1a2540;
+  --navy4:   #243058;
+  --gold:    #f5c518;
+  --gold2:   #d4a017;
+  --teal:    #00c9a7;
+  --red:     #ef4444;
+  --text:    #e8edf5;
+  --muted:   #6b7a99;
+  --border:  #1e2d4a;
+  --card-bg: #131e35;
+  --card-on: #0f2044;
+  --radius:  12px;
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body:    'Barlow', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--navy);
+  color: var(--text);
+  font-family: var(--font-body);
+  min-height: 100dvh;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+.no-scroll::-webkit-scrollbar { display: none; }
+.no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+#header {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(11,17,32,0.92);
+  backdrop-filter: blur(16px) saturate(1.5);
+  border-bottom: 1px solid var(--border);
+}
+.header-top {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px 10px;
+}
+.logo {
+  display: flex; align-items: center; gap: 8px; flex: 1;
+}
+.logo-icon {
+  width: 36px; height: 36px; background: var(--gold);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.logo-icon i { color: var(--navy); font-size: 18px; }
+.logo-text { font-family: var(--font-display); font-weight: 900; font-size: 20px; letter-spacing: 0.5px; line-height: 1; }
+.logo-sub  { font-size: 10px; color: var(--gold); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+
+/* Search */
+.search-wrap {
+  position: relative; flex: 1; max-width: 260px;
+}
+.search-wrap i {
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--muted); font-size: 13px; pointer-events: none;
+}
+#searchInput {
+  width: 100%; padding: 9px 12px 9px 34px;
+  background: var(--navy3); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-family: var(--font-body);
+  font-size: 14px; outline: none; transition: border-color .2s;
+}
+#searchInput::placeholder { color: var(--muted); }
+#searchInput:focus { border-color: var(--gold); }
+
+/* Stats bar */
+.stats-bar {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 0; border-top: 1px solid var(--border);
+}
+.stat-item {
+  padding: 8px 12px; display: flex; flex-direction: column;
+  align-items: center; gap: 1px;
+  border-right: 1px solid var(--border);
+}
+.stat-item:last-child { border-right: none; }
+.stat-val {
+  font-family: var(--font-display); font-size: 20px; font-weight: 900;
+  line-height: 1;
+}
+.stat-val.gold  { color: var(--gold); }
+.stat-val.teal  { color: var(--teal); }
+.stat-val.red   { color: #fb923c; }
+.stat-label { font-size: 9px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .8px; }
+
+/* Progress bar */
+.progress-wrap {
+  padding: 0 16px 8px; border-top: 1px solid var(--border); padding-top: 8px;
+}
+.progress-track {
+  height: 4px; background: var(--navy3); border-radius: 99px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; background: linear-gradient(90deg, var(--teal), var(--gold));
+  border-radius: 99px; transition: width .6s cubic-bezier(.4,0,.2,1);
+}
+.progress-labels {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: var(--muted); margin-top: 4px;
+}
+
+/* Filter tabs */
+.filter-row {
+  display: flex; gap: 6px; overflow-x: auto; padding: 8px 16px;
+  border-top: 1px solid var(--border);
+}
+.filter-row:empty { display: none; }
+.chip {
+  flex-shrink: 0; padding: 5px 12px; border-radius: 99px; font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: all .15s; white-space: nowrap;
+  border: 1.5px solid var(--border); background: transparent; color: var(--muted);
+  font-family: var(--font-body);
+}
+.chip:active { transform: scale(.95); }
+.chip.active-group   { background: var(--gold); color: var(--navy); border-color: var(--gold); }
+.chip.active-country { background: #1e3a8a; color: #93c5fd; border-color: #1d4ed8; }
+
+/* ── Main ───────────────────────────────────────────────────────────────── */
+main { padding: 16px; max-width: 640px; margin: 0 auto; }
+
+/* Section header */
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.section-title {
+  font-family: var(--font-display); font-size: 18px; font-weight: 700;
+  letter-spacing: .3px;
+}
+.section-count {
+  font-size: 12px; color: var(--muted); font-weight: 600;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+#cardsContainer { display: flex; flex-direction: column; gap: 8px; }
+
+.sticker-card {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: var(--radius); display: flex; align-items: center;
+  gap: 12px; padding: 12px 14px; cursor: pointer;
+  transition: transform .12s, border-color .15s, background .15s;
+  position: relative; overflow: hidden;
+}
+.sticker-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--border); border-radius: 3px 0 0 3px;
+  transition: background .15s;
+}
+.sticker-card:active { transform: scale(.98); }
+.sticker-card.owned {
+  background: var(--card-on); border-color: #1e3f7a;
+}
+.sticker-card.owned::before { background: var(--gold); }
+
+/* Badge code */
+.badge-code {
+  font-family: var(--font-display); font-weight: 900; font-size: 22px;
+  line-height: 1; color: var(--text); min-width: 44px; text-align: center;
+  flex-shrink: 0;
+}
+.sticker-card.owned .badge-code { color: var(--gold); }
+
+/* Card info */
+.card-info { flex: 1; min-width: 0; }
+.card-name {
+  font-size: 15px; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; line-height: 1.2;
+}
+.card-country {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 3px; font-size: 11px; color: var(--muted); font-weight: 500;
+}
+
+/* Check button */
+.btn-check {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--border); background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; cursor: pointer;
+}
+.btn-check i { color: var(--muted); font-size: 14px; transition: color .15s; }
+.sticker-card.owned .btn-check {
+  background: var(--gold); border-color: var(--gold);
+}
+.sticker-card.owned .btn-check i { color: var(--navy); }
+
+/* Repeat control */
+.repeat-ctrl {
+  display: flex; align-items: center; gap: 0;
+  background: var(--navy3); border: 1px solid var(--border);
+  border-radius: 8px; overflow: hidden; flex-shrink: 0;
+}
+.repeat-btn {
+  width: 30px; height: 30px; background: transparent; border: none;
+  color: var(--muted); cursor: pointer; display: flex; align-items: center;
+  justify-content: center; font-size: 12px; transition: background .1s;
+}
+.repeat-btn:active { background: var(--navy4); }
+.repeat-num {
+  font-family: var(--font-display); font-size: 17px; font-weight: 700;
+  min-width: 26px; text-align: center; color: #fb923c;
+  line-height: 1;
+}
+.repeat-num.zero { color: var(--muted); }
+
+/* ── Bottom Action Bar ──────────────────────────────────────────────────── */
+#actionBar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: rgba(11,17,32,0.95); backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border);
+  padding: 10px 20px calc(10px + env(safe-area-inset-bottom));
+  display: flex; gap: 10px; z-index: 50;
+}
+.action-btn {
+  flex: 1; padding: 12px 8px; border-radius: 10px; border: none;
+  font-family: var(--font-display); font-size: 15px; font-weight: 700;
+  letter-spacing: .3px; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; gap: 7px; transition: all .15s;
+}
+.action-btn:active { transform: scale(.96); }
+.btn-whatsapp {
+  background: #25d366; color: #fff;
+}
+.btn-whatsapp:disabled { background: var(--navy3); color: var(--muted); }
+.btn-missing {
+  background: var(--navy3); color: var(--text); border: 1.5px solid var(--border);
+}
+.btn-missing.active { background: var(--navy4); border-color: #3b82f6; color: #93c5fd; }
+
+/* ── Loading ────────────────────────────────────────────────────────────── */
+#loadingSection {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 60px 20px; gap: 16px;
+}
+.spinner {
+  width: 40px; height: 40px; border: 3px solid var(--border);
+  border-top-color: var(--gold); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center; padding: 48px 20px; color: var(--muted);
+}
+.empty-state i { font-size: 36px; margin-bottom: 12px; opacity: .4; }
+.empty-state p { font-size: 15px; }
+
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  padding: 10px 20px; border-radius: 99px; font-size: 13px; font-weight: 600;
+  white-space: nowrap; z-index: 200;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  transform: translateX(-50%) translateY(6px);
+}
+#toast.show {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+#toast.ok  { background: var(--teal); color: var(--navy); }
+#toast.err { background: var(--red); color: #fff; }
+#toast.info { background: var(--navy4); color: var(--text); border: 1px solid var(--border); }
+
+/* ── WhatsApp Modal ─────────────────────────────────────────────────────── */
+#waModal {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(5,10,20,.85); backdrop-filter: blur(8px);
+  align-items: flex-end; justify-content: center;
+}
+#waModal.open { display: flex; }
+.wa-sheet {
+  background: var(--navy2); border-radius: 20px 20px 0 0;
+  border: 1px solid var(--border); border-bottom: none;
+  width: 100%; max-width: 640px; max-height: 85dvh;
+  display: flex; flex-direction: column;
+  animation: slideUp .28s cubic-bezier(.4,0,.2,1);
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+.wa-header {
+  padding: 20px 20px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.wa-title { font-family: var(--font-display); font-size: 22px; font-weight: 800; }
+.wa-title span { color: #25d366; }
+.wa-close {
+  width: 32px; height: 32px; background: var(--navy3); border: none;
+  border-radius: 50%; color: var(--muted); cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.wa-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+
+.wa-preview {
+  background: var(--navy3); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px; font-size: 13px; line-height: 1.6;
+  color: var(--text); white-space: pre-wrap; font-family: monospace;
+  max-height: 220px; overflow-y: auto; margin-bottom: 16px;
+}
+
+.wa-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.wa-opt-label {
+  font-size: 11px; color: var(--muted); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .7px; margin-bottom: 6px;
+}
+.wa-toggle-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.wa-toggle {
+  padding: 7px 14px; border-radius: 99px; font-size: 13px; font-weight: 600;
+  border: 1.5px solid var(--border); background: transparent; color: var(--muted);
+  cursor: pointer; transition: all .15s; font-family: var(--font-body);
+}
+.wa-toggle.on { background: #25d36622; border-color: #25d366; color: #25d366; }
+
+.wa-footer {
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border); display: flex; gap: 10px;
+}
+.wa-send {
+  flex: 1; padding: 14px; border-radius: 10px; border: none;
+  background: #25d366; color: #fff; font-family: var(--font-display);
+  font-size: 17px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background .15s;
+}
+.wa-send:active { background: #1fbd5c; }
+.wa-copy {
+  padding: 14px 18px; border-radius: 10px; border: 1.5px solid var(--border);
+  background: var(--navy3); color: var(--text); font-family: var(--font-display);
+  font-size: 15px; font-weight: 700; cursor: pointer; transition: background .15s;
+}
+.wa-copy:active { background: var(--navy4); }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (min-width: 540px) {
+  .sticker-card { padding: 14px 18px; }
+  .badge-code { font-size: 26px; min-width: 52px; }
+  .card-name { font-size: 16px; }
+}
+
+/* Filter view toggle */
+.view-toggle {
+  display: flex; gap: 4px; background: var(--navy3);
+  border: 1px solid var(--border); border-radius: 8px; padding: 3px;
+}
+.view-btn {
+  padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  border: none; background: transparent; color: var(--muted); cursor: pointer;
+  transition: all .15s; font-family: var(--font-body);
+}
+.view-btn.active { background: var(--navy4); color: var(--text); }
+
+/* Highlight match */
+mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding: 0 1px; }
+</style>
 </head>
-<body class="text-gray-800 pb-20">
+<body>
 
-<header class="bg-blue-900 text-white sticky top-0 z-50 shadow-md">
-    <div class="p-4 pb-2">
-        <h1 class="text-xl font-bold text-center mb-3">Mi Álbum Panini</h1>
-        <div class="relative flex gap-2">
-            <div class="relative flex-1">
-                <span class="absolute inset-y-0 left-0 flex items-center pl-3">
-                    <i class="fa-solid fa-search text-gray-400"></i>
-                </span>
-                <input type="text" id="searchInput"
-                    class="w-full py-2 pl-10 pr-4 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="Buscar por jugador, país o código...">
-            </div>
-            <button onclick="openScanner()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-lg shadow transition-colors flex items-center justify-center">
-                <i class="fa-solid fa-camera"></i>
-            </button>
-        </div>
+<!-- HEADER -->
+<div id="header">
+  <div class="header-top">
+    <div class="logo">
+      <div class="logo-icon"><i class="fa-solid fa-star"></i></div>
+      <div>
+        <div class="logo-text">Mi Álbum</div>
+        <div class="logo-sub">Mundial 2026</div>
+      </div>
     </div>
-    <div class="bg-blue-800 px-2 py-2.5 border-t border-blue-700">
-        <div id="groupFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x"></div>
+    <div class="search-wrap">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="text" id="searchInput" placeholder="Jugador, código, país…" autocomplete="off" autocorrect="off" spellcheck="false">
     </div>
-    <div id="countryFiltersContainer" class="bg-slate-800 px-2 py-2 border-t border-slate-700 hidden">
-        <div id="countryFilters" class="flex gap-2 overflow-x-auto hide-scrollbar px-2 snap-x"></div>
-    </div>
-</header>
+  </div>
 
-<main class="p-4 max-w-2xl mx-auto">
-    <div id="loadingSection" class="text-center py-10">
-        <i class="fa-solid fa-spinner fa-spin text-4xl text-blue-600 mb-3"></i>
-        <p class="text-gray-600">Cargando base de datos...</p>
+  <div class="stats-bar" id="statsBar" style="display:none">
+    <div class="stat-item">
+      <span class="stat-val gold" id="statGot">0</span>
+      <span class="stat-label">Conseguidas</span>
     </div>
-    <div id="statsSection" class="hidden grid-cols-2 gap-4 mb-6">
-        <div class="bg-white p-3 rounded-lg shadow-sm text-center">
-            <p class="text-xs text-gray-500 uppercase font-bold">Completado</p>
-            <p class="text-xl font-bold text-blue-600" id="progressCount">0 / 980</p>
-        </div>
-        <div class="bg-white p-3 rounded-lg shadow-sm text-center">
-            <p class="text-xs text-gray-500 uppercase font-bold">Repetidas</p>
-            <p class="text-xl font-bold text-orange-500" id="duplicatesCount">0</p>
-        </div>
+    <div class="stat-item">
+      <span class="stat-val teal" id="statPct">0%</span>
+      <span class="stat-label">Completado</span>
     </div>
-    <div id="toastNotification" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 text-sm font-medium"></div>
-    <div id="cardsContainer" class="grid gap-3"></div>
+    <div class="stat-item">
+      <span class="stat-val red" id="statRep">0</span>
+      <span class="stat-label">Repetidas</span>
+    </div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap" style="display:none">
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="progress-labels">
+      <span id="progressLabel">0 de 0 figuritas</span>
+      <span id="progressMissing">0 faltan</span>
+    </div>
+  </div>
+
+  <div class="filter-row no-scroll" id="groupFilters"></div>
+  <div class="filter-row no-scroll" id="countryFilters" style="display:none"></div>
+</div>
+
+<!-- MAIN -->
+<main>
+  <!-- Loading -->
+  <div id="loadingSection">
+    <div class="spinner"></div>
+    <p style="color:var(--muted);font-size:14px">Cargando álbum…</p>
+  </div>
+
+  <!-- Content (hidden until loaded) -->
+  <div id="contentSection" style="display:none">
+    <div class="section-head">
+      <div>
+        <div class="section-title" id="sectionTitle">Todas las figuritas</div>
+        <div class="section-count" id="sectionCount"></div>
+      </div>
+      <div class="view-toggle">
+        <button class="view-btn active" id="viewAll"   onclick="setView('all')">Todas</button>
+        <button class="view-btn"        id="viewMiss"  onclick="setView('missing')">Faltan</button>
+        <button class="view-btn"        id="viewOwned" onclick="setView('owned')">Tengo</button>
+      </div>
+    </div>
+
+    <div id="cardsContainer"></div>
+
+    <div id="emptyState" class="empty-state" style="display:none">
+      <i class="fa-solid fa-box-open"></i>
+      <p>No hay figuritas que coincidan</p>
+    </div>
+  </div>
 </main>
 
-<!-- MODAL ESCÁNER -->
-<div id="scannerModal" class="fixed inset-0 bg-black z-[100] hidden flex-col">
+<!-- BOTTOM BAR -->
+<div id="actionBar" style="display:none">
+  <button class="action-btn btn-whatsapp" id="btnWA" onclick="openWA()">
+    <i class="fa-brands fa-whatsapp" style="font-size:18px"></i>
+    Compartir repetidas
+  </button>
+  <button class="action-btn btn-missing" id="btnToggleMissing" onclick="setView('missing')">
+    <i class="fa-solid fa-list-check"></i>
+    Me faltan
+  </button>
+</div>
 
-    <!-- Barra superior -->
-    <div class="p-4 flex justify-between items-center text-white bg-black/50 absolute top-0 w-full z-20">
-        <button onclick="toggleFlash()" class="text-white text-2xl w-10 h-10 flex items-center justify-center bg-gray-800/60 rounded-full">
-            <i id="flashIcon" class="fa-solid fa-bolt-slash"></i>
-        </button>
-        <div class="text-center">
-            <h2 class="text-base font-bold leading-none">Escanear figurita</h2>
-            <p id="zoomLabel" class="text-yellow-300 text-xs mt-0.5">Zoom: 1×</p>
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- WHATSAPP MODAL -->
+<div id="waModal" onclick="e => { if(e.target===this) closeWA(); }">
+  <div class="wa-sheet">
+    <div class="wa-header">
+      <div>
+        <div class="wa-title">Compartir por <span>WhatsApp</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px" id="waSubtitle"></div>
+      </div>
+      <button class="wa-close" onclick="closeWA()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="wa-body">
+      <div class="wa-options">
+        <div class="wa-opt-label">Incluir en el mensaje</div>
+        <div class="wa-toggle-row">
+          <button class="wa-toggle on" id="togCodes"   onclick="toggleOpt('codes')"  >Códigos</button>
+          <button class="wa-toggle on" id="togNames"   onclick="toggleOpt('names')"  >Nombres</button>
+          <button class="wa-toggle on" id="togCountry" onclick="toggleOpt('country')" >País</button>
+          <button class="wa-toggle"   id="togGroup"   onclick="toggleOpt('group')"   >Grupo</button>
         </div>
-        <button onclick="closeScanner()" class="text-white text-2xl w-10 h-10 flex items-center justify-center bg-gray-800/60 rounded-full">
-            <i class="fa-solid fa-xmark"></i>
-        </button>
+      </div>
+
+      <div class="wa-opt-label" style="margin-bottom:8px">Vista previa del mensaje</div>
+      <div class="wa-preview" id="waPreview"></div>
     </div>
 
-    <!-- Área de cámara -->
-    <div id="cameraArea" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
-        <video id="cameraFeed" autoplay playsinline muted class="object-cover w-full h-full"></video>
-        <!-- Marco guía -->
-        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div class="relative w-64 h-80 border-2 border-yellow-400/70 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]">
-                <div class="absolute top-0 left-0  w-5 h-5 border-t-4 border-l-4 border-yellow-400 rounded-tl"></div>
-                <div class="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-yellow-400 rounded-tr"></div>
-                <div class="absolute bottom-0 left-0  w-5 h-5 border-b-4 border-l-4 border-yellow-400 rounded-bl"></div>
-                <div class="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-yellow-400 rounded-br"></div>
-            </div>
-        </div>
-        <div id="focusRing"></div>
+    <div class="wa-footer">
+      <button class="wa-copy" onclick="copyWA()"><i class="fa-solid fa-copy"></i></button>
+      <button class="wa-send" onclick="sendWA()">
+        <i class="fa-brands fa-whatsapp" style="font-size:18px"></i>
+        Enviar por WhatsApp
+      </button>
     </div>
-
-    <!-- Selector de cámara -->
-    <div id="cameraSelectorBar" class="bg-gray-900/95 px-4 pt-3 pb-2 z-20 border-t border-gray-700">
-        <p class="text-gray-400 text-xs text-center mb-2 font-semibold uppercase tracking-wide">Seleccionar cámara</p>
-        <div id="cameraButtons" class="flex gap-2 overflow-x-auto hide-scrollbar pb-1"></div>
-    </div>
-
-    <!-- Zoom -->
-    <div class="bg-gray-900/90 px-4 pt-2 pb-1 z-20">
-        <div class="flex items-center gap-3">
-            <span class="text-gray-400 text-xs w-4">1×</span>
-            <input type="range" id="zoomSlider" min="1" max="4" step="0.1" value="1"
-                class="flex-1 h-1 appearance-none bg-gray-600 rounded-full outline-none">
-            <span class="text-gray-400 text-xs w-4">4×</span>
-        </div>
-        <p class="text-gray-500 text-xs text-center mt-1">Desliza para acercar · Toca la imagen para enfocar</p>
-    </div>
-
-    <!-- Barra inferior -->
-    <div class="bg-gray-900 px-6 py-5 flex flex-col items-center z-20">
-        <p id="scanStatus" class="text-blue-300 mb-4 text-sm font-medium text-center min-h-5"></p>
-        <button id="captureBtn" onclick="captureForPreview()"
-            class="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center border-4 border-white shadow-lg active:scale-95 transition-transform">
-            <i class="fa-solid fa-camera text-white text-xl"></i>
-        </button>
-    </div>
-
-    <!-- Preview -->
-    <div id="previewContainer" class="hidden absolute inset-0 bg-black/85 flex flex-col items-center justify-center z-30 p-6">
-        <p class="text-white font-semibold mb-3">¿La imagen se ve nítida?</p>
-        <img id="previewImg" class="rounded-lg border-2 border-yellow-400 max-h-64 mb-5 object-contain" />
-        <div class="flex gap-4">
-            <button onclick="retryCapture()" class="bg-gray-700 text-white px-6 py-2.5 rounded-full font-bold text-sm">
-                <i class="fa-solid fa-rotate-left mr-1"></i> Reintentar
-            </button>
-            <button onclick="confirmScan()" class="bg-green-600 text-white px-6 py-2.5 rounded-full font-bold text-sm">
-                <i class="fa-solid fa-check mr-1"></i> Analizar
-            </button>
-        </div>
-    </div>
+  </div>
 </div>
 
 <script>
-// ─── Estado global ────────────────────────────────────────────────────────────
-const STORAGE_KEY = 'panini_album_data';
+// ── State ────────────────────────────────────────────────────────────────────
+const KEY = 'panini_v2';
 let albumData = [];
-let uniqueGroups = [], uniqueCountries = [];
-let currentGroupFilter = 'Todos', currentCountryFilter = 'Todos';
+let groups = [], countries = [];
+let filterGroup = 'Todos', filterCountry = 'Todos';
+let viewMode = 'all'; // all | missing | owned
+let searchTerm = '';
+let waOpts = { codes: true, names: true, country: true, group: false };
 
-let mediaStream    = null;
-let isFlashOn      = false;
-let currentZoom    = 1;
-let useNativeZoom  = false;
-let pendingCanvas  = null;
+// ── DOM ───────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const searchInput    = $('searchInput');
+const groupFilters   = $('groupFilters');
+const countryFilters = $('countryFilters');
+const cardsContainer = $('cardsContainer');
+const emptyState     = $('emptyState');
+const loadingSection = $('loadingSection');
+const contentSection = $('contentSection');
+const statsBar       = $('statsBar');
+const progressWrap   = $('progressWrap');
+const actionBar      = $('actionBar');
+const toast          = $('toast');
+const waModal        = $('waModal');
+const waPreview      = $('waPreview');
+const waSubtitle     = $('waSubtitle');
 
-// Lista de cámaras disponibles
-let availableCameras = [];   // [{ deviceId, label, facing, icon, res }]
-let selectedCameraId = null;
-
-// ─── DOM refs ────────────────────────────────────────────────────────────────
-const loadingSection     = document.getElementById('loadingSection');
-const statsSection       = document.getElementById('statsSection');
-const cardsContainer     = document.getElementById('cardsContainer');
-const searchInput        = document.getElementById('searchInput');
-const groupFiltersEl     = document.getElementById('groupFilters');
-const countryFiltersWrap = document.getElementById('countryFiltersContainer');
-const countryFiltersEl   = document.getElementById('countryFilters');
-const toastEl            = document.getElementById('toastNotification');
-const scannerModal       = document.getElementById('scannerModal');
-const cameraFeed         = document.getElementById('cameraFeed');
-const cameraArea         = document.getElementById('cameraArea');
-const scanStatus         = document.getElementById('scanStatus');
-const captureBtn         = document.getElementById('captureBtn');
-const flashIcon          = document.getElementById('flashIcon');
-const focusRing          = document.getElementById('focusRing');
-const previewContainer   = document.getElementById('previewContainer');
-const previewImg         = document.getElementById('previewImg');
-const zoomSlider         = document.getElementById('zoomSlider');
-const zoomLabel          = document.getElementById('zoomLabel');
-const cameraButtons      = document.getElementById('cameraButtons');
-
-// ─── Utilidades ───────────────────────────────────────────────────────────────
-function quitarAcentos(t) {
-    return t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase() : '';
-}
-function showToast(msg, ok=true) {
-    toastEl.innerText = msg;
-    toastEl.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 z-50 text-sm font-medium ${ok?'bg-green-600':'bg-red-600'} text-white`;
-    toastEl.style.opacity = '1';
-    setTimeout(() => toastEl.style.opacity = '0', 3000);
-}
-function setStatus(text, color='blue') {
-    const map = { blue:'text-blue-300', yellow:'text-yellow-400', green:'text-green-400', red:'text-red-400', orange:'text-orange-400' };
-    scanStatus.innerText = text;
-    scanStatus.className = `${map[color]||'text-blue-300'} mb-4 text-sm font-medium text-center min-h-5`;
-}
-
-// ─── Datos ────────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) { albumData = JSON.parse(stored); extractGroups(); showApp(); return; }
-    try {
-        const r = await fetch('data.csv');
-        if (!r.ok) throw new Error();
-        Papa.parse(await r.text(), {
-            header: true, skipEmptyLines: true,
-            complete: ({ data }) => {
-                albumData = data.map(row => ({
-                    codigo:       row['Código'],
-                    pais:         row['Categoría / Pais'],
-                    descripcion:  row['Descripción'],
-                    enInventario: row['En Inventario']==='TRUE'||row['En Inventario']==='True'||false,
-                    repetidas:    parseInt(row['Repetidas'])||0,
-                    grupo:        row['Grupos']||'Otros'
-                }));
-                extractGroups(); saveData(); showApp();
-            }
-        });
-    } catch { loadingSection.innerHTML = `<p class="text-red-600 font-bold">Error al leer data.csv</p>`; }
-}
-function extractGroups() {
-    uniqueGroups = ['Todos', ...new Set(albumData.map(i=>i.grupo).filter(Boolean))];
-}
-function updateCountryList() {
-    const src = currentGroupFilter!=='Todos' ? albumData.filter(i=>i.grupo===currentGroupFilter) : albumData;
-    uniqueCountries = ['Todos', ...new Set(src.map(i=>i.pais).filter(Boolean))];
-    if (!uniqueCountries.includes(currentCountryFilter)) currentCountryFilter='Todos';
-}
-function saveData()  { localStorage.setItem(STORAGE_KEY, JSON.stringify(albumData)); updateStats(); }
-function updateStats() {
-    const got = albumData.filter(c=>c.enInventario).length;
-    const rep = albumData.reduce((s,c)=>s+c.repetidas,0);
-    document.getElementById('progressCount').innerText  = `${got} / ${albumData.length}`;
-    document.getElementById('duplicatesCount').innerText = rep;
-}
-function showApp() {
-    loadingSection.classList.add('hidden');
-    statsSection.classList.remove('hidden');
-    statsSection.classList.add('grid');
-    renderGroupFilters(); updateCountryList(); renderCountryFilters(); filterCards(); updateStats();
+  const stored = localStorage.getItem(KEY);
+  if (stored) {
+    albumData = JSON.parse(stored);
+    launch();
+    return;
+  }
+  try {
+    const r = await fetch('data.csv');
+    if (!r.ok) throw new Error();
+    Papa.parse(await r.text(), {
+      header: true, skipEmptyLines: true,
+      complete({ data }) {
+        albumData = data.map(row => ({
+          codigo:      (row['Código'] || '').trim(),
+          pais:        (row['Categoría / Pais'] || '').trim(),
+          descripcion: (row['Descripción'] || '').trim(),
+          enInventario: row['En Inventario']==='TRUE'||row['En Inventario']==='True',
+          repetidas:   parseInt(row['Repetidas']) || 0,
+          grupo:       (row['Grupos'] || 'Otros').trim()
+        }));
+        save(); launch();
+      }
+    });
+  } catch {
+    loadingSection.innerHTML = '<p style="color:#ef4444;font-weight:600;text-align:center">Error al leer data.csv</p>';
+  }
 }
 
-// ─── Filtros y tarjetas ────────────────────────────────────────────────────────
+function launch() {
+  loadingSection.style.display = 'none';
+  contentSection.style.display = 'block';
+  statsBar.style.display       = 'grid';
+  progressWrap.style.display   = 'block';
+  actionBar.style.display      = 'flex';
+  extractMeta();
+  renderGroupFilters();
+  render();
+  updateStats();
+}
+
+function extractMeta() {
+  groups = ['Todos', ...new Set(albumData.map(i => i.grupo).filter(Boolean))];
+}
+function extractCountries() {
+  const src = filterGroup !== 'Todos' ? albumData.filter(i => i.grupo === filterGroup) : albumData;
+  countries = ['Todos', ...new Set(src.map(i => i.pais).filter(Boolean))];
+  if (!countries.includes(filterCountry)) filterCountry = 'Todos';
+}
+
+function save() { localStorage.setItem(KEY, JSON.stringify(albumData)); }
+
+// ── Stats ────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const got  = albumData.filter(c => c.enInventario).length;
+  const rep  = albumData.reduce((s,c) => s + c.repetidas, 0);
+  const pct  = albumData.length ? Math.round(got / albumData.length * 100) : 0;
+  const miss = albumData.length - got;
+  $('statGot').textContent  = got;
+  $('statPct').textContent  = pct + '%';
+  $('statRep').textContent  = rep;
+  $('progressFill').style.width = pct + '%';
+  $('progressLabel').textContent = `${got} de ${albumData.length} figuritas`;
+  $('progressMissing').textContent = `${miss} faltan`;
+
+  // WA button state
+  const hasRep = albumData.some(c => c.repetidas > 0);
+  $('btnWA').disabled = !hasRep;
+}
+
+// ── Filters ───────────────────────────────────────────────────────────────────
 function renderGroupFilters() {
-    groupFiltersEl.innerHTML='';
-    uniqueGroups.forEach(g => {
-        const b=document.createElement('button');
-        b.className=`snap-start whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors border-2 ${currentGroupFilter===g?'bg-blue-100 text-blue-900 border-blue-200 shadow-sm':'bg-transparent text-blue-100 border-transparent hover:bg-blue-700'}`;
-        b.innerText=g;
-        b.onclick=()=>{currentGroupFilter=g;currentCountryFilter='Todos';renderGroupFilters();updateCountryList();renderCountryFilters();filterCards();};
-        groupFiltersEl.appendChild(b);
-    });
+  groupFilters.innerHTML = '';
+  groups.forEach(g => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (filterGroup === g ? ' active-group' : '');
+    b.textContent = g;
+    b.onclick = () => { filterGroup = g; filterCountry = 'Todos'; renderGroupFilters(); extractCountries(); renderCountryFilters(); render(); };
+    groupFilters.appendChild(b);
+  });
 }
 function renderCountryFilters() {
-    countryFiltersEl.innerHTML='';
-    if (currentGroupFilter==='Todos'||uniqueCountries.length<=2){countryFiltersWrap.classList.add('hidden');return;}
-    countryFiltersWrap.classList.remove('hidden');
-    uniqueCountries.forEach(p=>{
-        const b=document.createElement('button');
-        b.className=`snap-start whitespace-nowrap px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${currentCountryFilter===p?'bg-orange-500 text-white border-orange-400 shadow-sm':'bg-transparent text-slate-300 border-transparent hover:bg-slate-700'}`;
-        b.innerText=p;
-        b.onclick=()=>{currentCountryFilter=p;renderCountryFilters();filterCards();};
-        countryFiltersEl.appendChild(b);
-    });
+  extractCountries();
+  const show = filterGroup !== 'Todos' && countries.length > 2;
+  countryFilters.style.display = show ? 'flex' : 'none';
+  countryFilters.innerHTML = '';
+  if (!show) return;
+  countries.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (filterCountry === p ? ' active-country' : '');
+    b.textContent = p;
+    b.onclick = () => { filterCountry = p; renderCountryFilters(); render(); };
+    countryFilters.appendChild(b);
+  });
 }
-function filterCards() {
-    const term=quitarAcentos(searchInput.value);
-    const f=albumData.filter(c=>{
-        const d=quitarAcentos(c.descripcion),cod=quitarAcentos(c.codigo),pt=quitarAcentos(c.pais);
-        return (d.includes(term)||cod.includes(term)||pt.includes(term))
-            &&(currentGroupFilter==='Todos'||c.grupo===currentGroupFilter)
-            &&(currentCountryFilter==='Todos'||c.pais===currentCountryFilter);
-    });
-    renderCards(f);
+
+// ── View mode ─────────────────────────────────────────────────────────────────
+function setView(mode) {
+  viewMode = mode;
+  ['viewAll','viewMiss','viewOwned'].forEach(id => $( id).classList.remove('active'));
+  const map = { all:'viewAll', missing:'viewMiss', owned:'viewOwned' };
+  $(map[mode]).classList.add('active');
+  // Toggle missing button style
+  $('btnToggleMissing').classList.toggle('active', mode === 'missing');
+  render();
 }
-searchInput.addEventListener('input',filterCards);
-function renderCards(data) {
-    cardsContainer.innerHTML='';
-    data.slice(0,100).forEach(card=>{
-        const ri=albumData.findIndex(c=>c.codigo===card.codigo);
-        const el=document.createElement('div');
-        el.className=`p-4 rounded-lg border-2 shadow-sm flex items-center justify-between transition-colors ${card.enInventario?'bg-blue-50 border-blue-300':'bg-white border-gray-200'}`;
-        el.innerHTML=`
-            <div class="flex-1 cursor-pointer" onclick="toggleInventario(${ri})">
-                <div class="flex items-center gap-2">
-                    <span class="font-bold text-lg ${card.enInventario?'text-blue-700':'text-gray-700'}">${card.codigo}</span>
-                    <span class="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded-full font-semibold">${card.pais}</span>
-                </div>
-                <p class="text-sm text-gray-600 mt-1 font-medium">${card.descripcion}</p>
-            </div>
-            <div class="flex items-center gap-3 ml-2">
-                <button onclick="toggleInventario(${ri})" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors ${card.enInventario?'bg-blue-500 text-white shadow-md':'bg-gray-200 text-gray-400'}">
-                    <i class="fa-solid fa-check"></i>
-                </button>
-                <div class="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
-                    <button onclick="updateRepetidas(${ri},-1)" class="w-7 h-7 text-gray-600 hover:bg-gray-200 rounded flex items-center justify-center"><i class="fa-solid fa-minus text-xs"></i></button>
-                    <span class="w-6 text-center font-bold text-sm text-orange-600">${card.repetidas}</span>
-                    <button onclick="updateRepetidas(${ri},1)" class="w-7 h-7 text-gray-600 hover:bg-gray-200 rounded flex items-center justify-center"><i class="fa-solid fa-plus text-xs"></i></button>
-                </div>
-            </div>`;
-        cardsContainer.appendChild(el);
-    });
+
+// ── Normalise ─────────────────────────────────────────────────────────────────
+function norm(t) { return t ? t.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase() : ''; }
+
+function highlight(text, term) {
+  if (!term) return text;
+  const nt = norm(text), idx = nt.indexOf(term);
+  if (idx < 0) return text;
+  return text.slice(0, idx) + '<mark>' + text.slice(idx, idx + term.length) + '</mark>' + text.slice(idx + term.length);
 }
-window.toggleInventario = i => {
-    albumData[i].enInventario=!albumData[i].enInventario;
-    if(!albumData[i].enInventario) albumData[i].repetidas=0;
-    saveData(); filterCards();
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  const term = norm(searchTerm);
+
+  let list = albumData.filter(c => {
+    const matchSearch = !term || norm(c.descripcion).includes(term) || norm(c.codigo).includes(term) || norm(c.pais).includes(term);
+    const matchGroup  = filterGroup === 'Todos' || c.grupo === filterGroup;
+    const matchCountry = filterCountry === 'Todos' || c.pais === filterCountry;
+    const matchView   = viewMode === 'all' || (viewMode === 'owned' && c.enInventario) || (viewMode === 'missing' && !c.enInventario);
+    return matchSearch && matchGroup && matchCountry && matchView;
+  });
+
+  // Section info
+  const titles = { all: 'Todas las figuritas', missing: 'Figuritas que faltan', owned: 'Figuritas conseguidas' };
+  $('sectionTitle').textContent = titles[viewMode];
+  $('sectionCount').textContent = `${list.length} ${list.length === 1 ? 'resultado' : 'resultados'}`;
+
+  // Limit render for performance
+  const LIMIT = 120;
+  const shown = list.slice(0, LIMIT);
+
+  cardsContainer.innerHTML = '';
+  emptyState.style.display = shown.length ? 'none' : 'block';
+
+  shown.forEach(card => {
+    const ri = albumData.findIndex(c => c.codigo === card.codigo);
+    const el = document.createElement('div');
+    el.className = 'sticker-card' + (card.enInventario ? ' owned' : '');
+
+    const nameHL    = highlight(card.descripcion, term);
+    const codeHL    = highlight(card.codigo, term);
+    const countryHL = highlight(card.pais, term);
+
+    el.innerHTML = `
+      <div class="badge-code">${codeHL}</div>
+      <div class="card-info">
+        <div class="card-name">${nameHL}</div>
+        <div class="card-country"><i class="fa-solid fa-location-dot" style="font-size:9px"></i>${countryHL}</div>
+      </div>
+      <div class="repeat-ctrl">
+        <button class="repeat-btn" onclick="changeRep(event,${ri},-1)"><i class="fa-solid fa-minus"></i></button>
+        <span class="repeat-num${card.repetidas===0?' zero':''}">${card.repetidas}</span>
+        <button class="repeat-btn" onclick="changeRep(event,${ri},1)"><i class="fa-solid fa-plus"></i></button>
+      </div>
+      <button class="btn-check" onclick="toggle(event,${ri})"><i class="fa-solid fa-check"></i></button>
+    `;
+    // Tap card body to toggle (except controls)
+    el.addEventListener('click', e => {
+      if (e.target.closest('.btn-check') || e.target.closest('.repeat-ctrl')) return;
+      toggle(e, ri);
+    });
+    cardsContainer.appendChild(el);
+  });
+
+  if (list.length > LIMIT) {
+    const more = document.createElement('p');
+    more.style.cssText = 'text-align:center;font-size:13px;color:var(--muted);padding:16px 0';
+    more.textContent = `Mostrando ${LIMIT} de ${list.length}. Usa el buscador para filtrar más.`;
+    cardsContainer.appendChild(more);
+  }
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+window.toggle = function(e, i) {
+  e.stopPropagation();
+  albumData[i].enInventario = !albumData[i].enInventario;
+  if (!albumData[i].enInventario) albumData[i].repetidas = 0;
+  save(); updateStats(); render();
+  toast_(albumData[i].enInventario ? `✓ ${albumData[i].descripcion}` : `Quitada: ${albumData[i].descripcion}`, albumData[i].enInventario ? 'ok' : 'info');
 };
-window.updateRepetidas = (i,d) => {
-    let v=albumData[i].repetidas+d; if(v<0)v=0;
-    if(v>0&&!albumData[i].enInventario) albumData[i].enInventario=true;
-    albumData[i].repetidas=v; saveData(); filterCards();
+
+window.changeRep = function(e, i, delta) {
+  e.stopPropagation();
+  let v = albumData[i].repetidas + delta;
+  if (v < 0) v = 0;
+  if (v > 0 && !albumData[i].enInventario) albumData[i].enInventario = true;
+  albumData[i].repetidas = v;
+  save(); updateStats(); render();
 };
 
-// ─── CÁMARA ───────────────────────────────────────────────────────────────────
-
-// Intenta detectar qué tipo de lente es cada cámara por su etiqueta
-function guessCameraInfo(label, index, facingMode) {
-    const l = label.toLowerCase();
-    // Iconos y nombres según palabras clave del label
-    if (l.includes('ultra') || l.includes('wide') || l.includes('gran angular') || l.includes('0.5'))
-        return { icon: 'fa-expand', name: 'Ultra gran angular' };
-    if (l.includes('tele') || l.includes('zoom') || l.includes('5x') || l.includes('3x') || l.includes('2x'))
-        return { icon: 'fa-crosshairs', name: `Teleobjetivo` };
-    if (l.includes('front') || l.includes('frontal') || l.includes('selfie') || facingMode==='user')
-        return { icon: 'fa-user', name: 'Frontal' };
-    if (l.includes('depth') || l.includes('profundidad'))
-        return { icon: 'fa-layer-group', name: 'Profundidad' };
-    if (l.includes('macro'))
-        return { icon: 'fa-magnifying-glass', name: 'Macro' };
-    // Cámara trasera genérica: la primera suele ser la principal
-    if (facingMode === 'environment' || l.includes('back') || l.includes('trasera') || l.includes('rear'))
-        return { icon: 'fa-camera', name: index === 0 ? 'Principal' : `Trasera ${index+1}` };
-    return { icon: 'fa-camera', name: label || `Cámara ${index+1}` };
-}
-
-// Enumera las cámaras de vídeo disponibles
-async function enumerateCameras() {
-    try {
-        // Necesitamos permiso primero (algunos navegadores dan labels vacíos sin él)
-        const tempStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        tempStream.getTracks().forEach(t => t.stop());
-    } catch(e) { /* si falla, intentamos igual */ }
-
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(d => d.kind === 'videoinput');
-
-    // Detectar facing mode probando cada cámara brevemente
-    availableCameras = [];
-    for (let i = 0; i < videoDevices.length; i++) {
-        const d = videoDevices[i];
-        let facingMode = 'unknown';
-        // Intentar obtener facingMode real del track
-        try {
-            const s = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: d.deviceId } } });
-            const track = s.getVideoTracks()[0];
-            const settings = track.getSettings();
-            facingMode = settings.facingMode || 'unknown';
-            s.getTracks().forEach(t => t.stop());
-        } catch(e) {}
-
-        const info = guessCameraInfo(d.label, i, facingMode);
-        availableCameras.push({
-            deviceId:   d.deviceId,
-            label:      d.label || `Cámara ${i+1}`,
-            facingMode,
-            icon:       info.icon,
-            name:       info.name
-        });
-    }
-
-    // Seleccionar por defecto la primera cámara trasera (o la primera disponible)
-    if (!selectedCameraId) {
-        const rear = availableCameras.find(c => c.facingMode === 'environment');
-        selectedCameraId = rear ? rear.deviceId : availableCameras[0]?.deviceId;
-    }
-}
-
-// Renderiza los botones de selección de cámara
-function renderCameraButtons() {
-    cameraButtons.innerHTML = '';
-    availableCameras.forEach(cam => {
-        const btn = document.createElement('button');
-        btn.className = `cam-btn ${cam.deviceId === selectedCameraId ? 'selected' : ''}`;
-        btn.innerHTML = `
-            <i class="fa-solid ${cam.icon} cam-icon"></i>
-            <span class="cam-label">${cam.name}</span>
-        `;
-        btn.onclick = () => switchCamera(cam.deviceId);
-        cameraButtons.appendChild(btn);
-    });
-}
-
-// Cambia a la cámara indicada
-async function switchCamera(deviceId) {
-    if (deviceId === selectedCameraId && mediaStream) return;
-    selectedCameraId = deviceId;
-    renderCameraButtons();
-    await startCamera(deviceId);
-}
-
-// Inicia (o reinicia) el stream con la cámara seleccionada
-async function startCamera(deviceId) {
-    setStatus('Cambiando cámara...', 'yellow');
-
-    // Parar stream anterior
-    if (mediaStream) {
-        if (isFlashOn) {
-            try { mediaStream.getVideoTracks()[0].applyConstraints({ advanced:[{torch:false}] }); } catch(e){}
-            isFlashOn = false;
-            flashIcon.className = 'fa-solid fa-bolt-slash';
-        }
-        mediaStream.getTracks().forEach(t => t.stop());
-        mediaStream = null;
-    }
-
-    try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                deviceId: { exact: deviceId },
-                width:  { ideal: 3840 },
-                height: { ideal: 2160 }
-            }
-        });
-        cameraFeed.srcObject = mediaStream;
-        await new Promise(res => { cameraFeed.onloadedmetadata = res; });
-
-        const track = mediaStream.getVideoTracks()[0];
-        const caps  = track.getCapabilities();
-        const sets  = track.getSettings();
-
-        // Zoom nativo
-        if (caps.zoom && caps.zoom.max > 1) {
-            useNativeZoom = true;
-            zoomSlider.min  = caps.zoom.min || 1;
-            zoomSlider.max  = Math.min(caps.zoom.max, 4);
-        } else {
-            useNativeZoom = false;
-            zoomSlider.min = 1;
-            zoomSlider.max = 4;
-        }
-        currentZoom = 1;
-        zoomSlider.value = 1;
-        zoomLabel.innerText = 'Zoom: 1×';
-
-        // Autofocus continuo
-        if (caps.focusMode && caps.focusMode.includes('continuous')) {
-            try { await track.applyConstraints({ advanced:[{focusMode:'continuous'}] }); } catch(e){}
-        }
-
-        const vw = sets.width  || cameraFeed.videoWidth;
-        const vh = sets.height || cameraFeed.videoHeight;
-        const camName = availableCameras.find(c=>c.deviceId===deviceId)?.name || 'Cámara';
-        setStatus(`${camName} · ${vw}×${vh}`, 'green');
-        setTimeout(() => setStatus('Acerca la figurita y pulsa la cámara','blue'), 2500);
-
-    } catch(err) {
-        console.error(err);
-        setStatus('No se pudo abrir esta cámara.', 'red');
-    }
-}
-
-async function openScanner() {
-    scannerModal.classList.remove('hidden');
-    scannerModal.classList.add('flex');
-    previewContainer.classList.add('hidden');
-    pendingCanvas = null;
-    setStatus('Detectando cámaras...', 'blue');
-
-    await enumerateCameras();
-    renderCameraButtons();
-    await startCamera(selectedCameraId);
-}
-
-function closeScanner() {
-    if (isFlashOn) toggleFlash();
-    if (mediaStream) { mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
-    scannerModal.classList.add('hidden');
-    scannerModal.classList.remove('flex');
-    previewContainer.classList.add('hidden');
-    pendingCanvas = null;
-}
-
-// Zoom slider
-zoomSlider.addEventListener('input', async () => {
-    currentZoom = parseFloat(zoomSlider.value);
-    zoomLabel.innerText = `Zoom: ${currentZoom.toFixed(1)}×`;
-    if (useNativeZoom && mediaStream) {
-        try { await mediaStream.getVideoTracks()[0].applyConstraints({ advanced:[{zoom:currentZoom}] }); } catch(e){}
-    }
+// ── Search ────────────────────────────────────────────────────────────────────
+let searchTimer;
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { searchTerm = searchInput.value; render(); }, 180);
 });
 
-// Linterna
-async function toggleFlash() {
-    if (!mediaStream) return;
-    const track = mediaStream.getVideoTracks()[0];
-    const caps  = track.getCapabilities();
-    if (caps.torch) {
-        isFlashOn = !isFlashOn;
-        try {
-            await track.applyConstraints({ advanced:[{torch:isFlashOn}] });
-            flashIcon.className = isFlashOn ? 'fa-solid fa-bolt text-yellow-400' : 'fa-solid fa-bolt-slash';
-        } catch(e) { console.error(e); }
-    } else {
-        setStatus('Flash no compatible en este dispositivo','orange');
-        setTimeout(()=>setStatus('Acerca la figurita y pulsa la cámara','blue'),3000);
-    }
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast_(msg, type='ok') {
+  toast.textContent = msg;
+  toast.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
 }
 
-// Enfoque táctil
-cameraArea.addEventListener('click', async e => {
-    if (!mediaStream || !previewContainer.classList.contains('hidden')) return;
-    const rect = cameraArea.getBoundingClientRect();
-    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+// ── WhatsApp ──────────────────────────────────────────────────────────────────
+function buildWAMessage() {
+  const reps = albumData.filter(c => c.repetidas > 0);
+  if (!reps.length) return '(sin repetidas)';
 
-    focusRing.style.left = `${x}px`;
-    focusRing.style.top  = `${y}px`;
-    focusRing.classList.remove('active');
-    void focusRing.offsetWidth;
-    focusRing.classList.add('active');
-    setTimeout(()=>focusRing.classList.remove('active'),750);
+  // Agrupar por grupo si la opción está activa
+  let lines = [];
+  lines.push('🌟 *Mis figuritas repetidas · Mundial 2026*');
+  lines.push('');
 
-    const track = mediaStream.getVideoTracks()[0];
-    const caps  = track.getCapabilities();
-    const px = x/rect.width, py = y/rect.height;
-    try {
-        if (caps.pointsOfInterest) {
-            await track.applyConstraints({ advanced:[{pointsOfInterest:[{x:px,y:py}],focusMode:'manual'}] });
-            setTimeout(async()=>{ try{ await track.applyConstraints({advanced:[{focusMode:'continuous'}]}); }catch(e){} },1500);
-        } else if (caps.focusMode && caps.focusMode.includes('continuous')) {
-            await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
-        }
-    } catch(e) { console.warn('Focus:',e); }
-});
+  if (waOpts.group) {
+    const byGroup = {};
+    reps.forEach(c => { if (!byGroup[c.grupo]) byGroup[c.grupo] = []; byGroup[c.grupo].push(c); });
+    Object.entries(byGroup).forEach(([g, cards]) => {
+      lines.push(`📁 *${g}*`);
+      cards.forEach(c => lines.push(buildLine(c)));
+      lines.push('');
+    });
+  } else {
+    reps.forEach(c => lines.push(buildLine(c)));
+    lines.push('');
+  }
 
-// ─── Captura ──────────────────────────────────────────────────────────────────
-function captureForPreview() {
-    if (!mediaStream) return;
-    const vw=cameraFeed.videoWidth, vh=cameraFeed.videoHeight;
-    if (!vw||!vh){ setStatus('La cámara aún no está lista','orange'); return; }
-
-    const dW=cameraArea.clientWidth, dH=cameraArea.clientHeight;
-    const vAsp=vw/vh, dAsp=dW/dH;
-    let rW,rH,oX=0,oY=0;
-    if(vAsp>dAsp){ rH=dH;rW=dH*vAsp;oX=(rW-dW)/2; }
-    else          { rW=dW;rH=dW/vAsp;oY=(rH-dH)/2; }
-    const sX=vw/rW, sY=vh/rH;
-
-    const gW=256,gH=320;
-    let srcX=((dW-gW)/2+oX)*sX;
-    let srcY=((dH-gH)/2+oY)*sY;
-    let srcW=gW*sX, srcH=gH*sY;
-
-    // Zoom digital si no hay zoom nativo
-    if (!useNativeZoom && currentZoom>1) {
-        const cx=srcX+srcW/2, cy=srcY+srcH/2;
-        srcW/=currentZoom; srcH/=currentZoom;
-        srcX=Math.max(0,Math.min(cx-srcW/2,vw-srcW));
-        srcY=Math.max(0,Math.min(cy-srcH/2,vh-srcH));
-    }
-
-    const outW=Math.round(srcW*2), outH=Math.round(srcH*2);
-    const canvas=document.createElement('canvas');
-    canvas.width=outW; canvas.height=outH;
-    const ctx=canvas.getContext('2d');
-    ctx.drawImage(cameraFeed,srcX,srcY,srcW,srcH,0,0,outW,outH);
-
-    // Preprocesado: escala de grises + contraste
-    const img=ctx.getImageData(0,0,outW,outH), d=img.data;
-    for(let i=0;i<d.length;i+=4){
-        const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
-        const c=clamp(((g/255-0.5)*1.6+0.5)*255);
-        d[i]=d[i+1]=d[i+2]=c;
-    }
-    ctx.putImageData(img,0,0);
-
-    pendingCanvas=canvas;
-    previewImg.src=canvas.toDataURL('image/jpeg',0.92);
-    previewContainer.classList.remove('hidden');
+  lines.push(`_Total: ${reps.reduce((s,c)=>s+c.repetidas,0)} repetidas en ${reps.length} figuritas_`);
+  lines.push('¿Cambiamos? 🤝');
+  return lines.join('\n');
 }
 
-function clamp(v){ return Math.max(0,Math.min(255,Math.round(v))); }
+function buildLine(c) {
+  let parts = [];
+  if (waOpts.codes)   parts.push(`[${c.codigo}]`);
+  if (waOpts.names)   parts.push(c.descripcion);
+  if (waOpts.country) parts.push(`(${c.pais})`);
+  parts.push(`×${c.repetidas}`);
+  return parts.join(' ');
+}
 
-window.retryCapture = () => {
-    previewContainer.classList.add('hidden');
-    pendingCanvas=null;
-    setStatus('Acerca la figurita y pulsa la cámara','blue');
-};
-window.confirmScan = () => {
-    if(!pendingCanvas) return;
-    previewContainer.classList.add('hidden');
-    runOCR(pendingCanvas);
-    pendingCanvas=null;
+function openWA() {
+  const reps = albumData.filter(c => c.repetidas > 0);
+  if (!reps.length) { toast_('No tienes figuritas repetidas', 'info'); return; }
+  waSubtitle.textContent = `${reps.length} figuritas · ${reps.reduce((s,c)=>s+c.repetidas,0)} unidades`;
+  refreshWAPreview();
+  waModal.classList.add('open');
+  // Close on backdrop click
+  waModal.onclick = e => { if (e.target === waModal) closeWA(); };
+}
+
+function closeWA() { waModal.classList.remove('open'); }
+
+function refreshWAPreview() {
+  waPreview.textContent = buildWAMessage();
+}
+
+window.toggleOpt = function(key) {
+  waOpts[key] = !waOpts[key];
+  $('tog' + key.charAt(0).toUpperCase() + key.slice(1)).classList.toggle('on', waOpts[key]);
+  refreshWAPreview();
 };
 
-async function runOCR(canvas) {
-    captureBtn.disabled = true; 
-    captureBtn.classList.add('opacity-50');
-    setStatus('Analizando imagen...', 'yellow');
-    
-    try {
-        const result = await Tesseract.recognize(canvas, 'spa', {
-            logger: m => { 
-                if(m.status === 'recognizing text') setStatus(`Leyendo: ${Math.round(m.progress * 100)}%`, 'yellow'); 
-            },
-            // Novedad: Obligamos a Tesseract a leer SOLO mayúsculas, números y guiones
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- '
-        });
-        
-        console.log("Texto crudo de Tesseract:", result.data.text);
-        procesarTexto(result.data.text);
-        
-    } catch(e) { 
-        console.error(e); 
-        setStatus('Error al analizar la imagen.', 'red'); 
-    }
-    
-    captureBtn.disabled = false; 
-    captureBtn.classList.remove('opacity-50');
-    setTimeout(closeScanner, 2500);
-}
+window.sendWA = function() {
+  const msg = buildWAMessage();
+  const url = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+};
 
-function procesarTexto(textoCrudo) {
-    // 1. Limpieza inicial: Todo a mayúsculas para buscar los códigos
-    let texto = textoCrudo.toUpperCase();
-
-    // 2. Corrector de errores típicos de cámara
-    // Cambia los ceros y cincos que lee mal al principio por letras, y luego fuerza números después del guion
-    texto = texto.replace(/0/g, 'O').replace(/5/g, 'S').replace(/8/g, 'B'); 
-    texto = texto.replace(/-O/g, '-0').replace(/-S/g, '-5').replace(/-B/g, '-8').replace(/-I/g, '-1');
-
-    console.log("Texto procesado y corregido:", texto);
-
-    let encontrado = false;
-
-    // 3. Cazador de Patrones (Regex)
-    // Busca 2 o 3 letras, un posible espacio o guion, y 1 o 2 números (Ej: ARG-10, FWC 1)
-    const regexCodigo = /([A-Z]{2,3})[\s\-]*([0-9]{1,2})/g;
-    const coincidencias = [...texto.matchAll(regexCodigo)];
-
-    if (coincidencias.length > 0) {
-        for (let match of coincidencias) {
-            // Reconstruimos el código limpio (si leyó "ARG 10", lo arma como "ARG-10")
-            let codigoExtraido = `${match[1]}-${match[2]}`;
-            
-            let cardIndex = albumData.findIndex(c => c.codigo === codigoExtraido);
-            
-            if (cardIndex !== -1) {
-                const card = albumData[cardIndex];
-                if (!card.enInventario) {
-                    albumData[cardIndex].enInventario = true; 
-                    saveData(); 
-                    filterCards(); 
-                    showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`, true);
-                } else {
-                    showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`, false);
-                }
-                setStatus(`¡Encontrado: ${card.codigo}!`, 'green');
-                encontrado = true;
-                break;
-            }
-        }
-    }
-
-    // 4. Fallback: Si no encontró el código por patrón, intentamos buscar el nombre
-    if (!encontrado) {
-        const textoNormalizado = quitarAcentos(textoCrudo).toLowerCase();
-        const palabras = textoNormalizado.split(/\s+/).filter(p => p.length > 4);
-        
-        for (let card of albumData) {
-            const desc = quitarAcentos(card.descripcion).toLowerCase();
-            let coincidenciasDesc = palabras.filter(p => desc.includes(p)).length;
-            
-            if (coincidenciasDesc >= 2 || (coincidenciasDesc >= 1 && desc.split(' ').length === 1)) {
-                if (!card.enInventario) {
-                    card.enInventario = true; 
-                    saveData(); 
-                    filterCards();
-                    showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`, true);
-                } else {
-                    showToast(`Ya tenías a ${card.descripcion}`, false);
-                }
-                setStatus(`¡Encontrado: ${card.codigo}!`, 'green');
-                encontrado = true;
-                break;
-            }
-        }
-    }
-
-    if (!encontrado) {
-        setStatus('No se reconoció el código.', 'orange');
-        showToast('Apunta directamente al código (Ej: ARG-10)', false);
-    }
-}
-
-function procesarTexto(texto) {
-    const palabras=texto.split(/\s+/).filter(p=>p.length>2);
-    for(let i=0;i<albumData.length;i++){
-        const card=albumData[i];
-        const cod=quitarAcentos(card.codigo), desc=quitarAcentos(card.descripcion);
-        if(texto.includes(cod)||palabras.some(p=>desc.includes(p)&&p.length>4)){
-            if(!card.enInventario){ card.enInventario=true; saveData(); filterCards(); showToast(`¡Agregada! ${card.descripcion} (${card.codigo})`,true); }
-            else showToast(`Ya tenías a ${card.descripcion} (${card.codigo})`,false);
-            setStatus(`¡Encontrado: ${card.codigo}!`,'green');
-            return;
-        }
-    }
-    setStatus('No se reconoció ninguna figurita.','orange');
-    showToast('No se pudo identificar. Búscala manualmente.',false);
-}
+window.copyWA = function() {
+  navigator.clipboard.writeText(buildWAMessage())
+    .then(() => toast_('Copiado al portapapeles', 'ok'))
+    .catch(() => toast_('Error al copiar', 'err'));
+};
 
 init();
 </script>
