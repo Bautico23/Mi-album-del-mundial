@@ -72,7 +72,7 @@ body {
 .logo-text { font-family: var(--font-display); font-weight: 900; font-size: 20px; letter-spacing: 0.5px; line-height: 1; }
 .logo-sub  { font-size: 10px; color: var(--gold); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
 
-/* Search */
+/* Search & Header Buttons */
 .search-wrap {
   position: relative; flex: 1; max-width: 260px;
 }
@@ -88,6 +88,13 @@ body {
 }
 #searchInput::placeholder { color: var(--muted); }
 #searchInput:focus { border-color: var(--gold); }
+
+.header-btn {
+  width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--navy3); color: var(--text); display: flex; align-items: center;
+  justify-content: center; cursor: pointer; flex-shrink: 0; transition: all .15s;
+}
+.header-btn:active { transform: scale(.95); background: var(--navy4); }
 
 /* Stats bar */
 .stats-bar {
@@ -288,13 +295,13 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 #toast.err { background: var(--red); color: #fff; }
 #toast.info { background: var(--navy4); color: var(--text); border: 1px solid var(--border); }
 
-/* ── WhatsApp Modal ─────────────────────────────────────────────────────── */
-#waModal {
+/* ── Modals (WhatsApp y Sync) ───────────────────────────────────────────── */
+.modal-overlay {
   display: none; position: fixed; inset: 0; z-index: 100;
   background: rgba(5,10,20,.85); backdrop-filter: blur(8px);
   align-items: flex-end; justify-content: center;
 }
-#waModal.open { display: flex; }
+.modal-overlay.open { display: flex; }
 .wa-sheet {
   background: var(--navy2); border-radius: 20px 20px 0 0;
   border: 1px solid var(--border); border-bottom: none;
@@ -357,6 +364,15 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 }
 .wa-copy:active { background: var(--navy4); }
 
+/* Sync Buttons */
+.sync-btn {
+  padding: 16px; border-radius: 12px; background: var(--navy3); border: 1.5px solid var(--border);
+  color: var(--text); font-family: var(--font-display); font-size: 18px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all .15s;
+}
+.sync-btn:active { transform: scale(0.96); background: var(--navy4); }
+
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (min-width: 540px) {
   .sticker-card { padding: 14px 18px; }
@@ -382,7 +398,6 @@ mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding:
 </head>
 <body>
 
-<!-- HEADER -->
 <div id="header">
   <div class="header-top">
     <div class="logo">
@@ -394,8 +409,12 @@ mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding:
     </div>
     <div class="search-wrap">
       <i class="fa-solid fa-magnifying-glass"></i>
-      <input type="text" id="searchInput" placeholder="Jugador, código, país…" autocomplete="off" autocorrect="off" spellcheck="false">
+      <input type="text" id="searchInput" placeholder="Jugador, código…" autocomplete="off" autocorrect="off" spellcheck="false">
     </div>
+    
+    <button class="header-btn" onclick="openSync()" title="Exportar o Importar">
+      <i class="fa-solid fa-arrows-rotate"></i>
+    </button>
   </div>
 
   <div class="stats-bar" id="statsBar" style="display:none">
@@ -425,15 +444,12 @@ mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding:
   <div class="filter-row no-scroll" id="countryFilters" style="display:none"></div>
 </div>
 
-<!-- MAIN -->
 <main>
-  <!-- Loading -->
   <div id="loadingSection">
     <div class="spinner"></div>
     <p style="color:var(--muted);font-size:14px">Cargando álbum…</p>
   </div>
 
-  <!-- Content (hidden until loaded) -->
   <div id="contentSection" style="display:none">
     <div class="section-head">
       <div>
@@ -456,7 +472,6 @@ mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding:
   </div>
 </main>
 
-<!-- BOTTOM BAR -->
 <div id="actionBar" style="display:none">
   <button class="action-btn btn-whatsapp" id="btnWA" onclick="openWA()">
     <i class="fa-brands fa-whatsapp" style="font-size:18px"></i>
@@ -468,11 +483,9 @@ mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding:
   </button>
 </div>
 
-<!-- TOAST -->
 <div id="toast"></div>
 
-<!-- WHATSAPP MODAL -->
-<div id="waModal" onclick="e => { if(e.target===this) closeWA(); }">
+<div id="waModal" class="modal-overlay" onclick="if(event.target===this) closeWA();">
   <div class="wa-sheet">
     <div class="wa-header">
       <div>
@@ -507,9 +520,45 @@ mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding:
   </div>
 </div>
 
+<div id="syncModal" class="modal-overlay" onclick="if(event.target===this) closeSync();">
+  <div class="wa-sheet">
+    <div class="wa-header">
+      <div>
+        <div class="wa-title">Respaldo y <span style="color: var(--teal)">Sincronización</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Transfiere tu álbum a otro dispositivo</div>
+      </div>
+      <button class="wa-close" onclick="closeSync()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="wa-body" style="display: flex; flex-direction: column; gap: 16px; padding: 24px 20px;">
+      
+      <button class="sync-btn" onclick="exportData()">
+        <i class="fa-solid fa-file-export" style="color: var(--teal); font-size: 20px;"></i> 
+        Exportar progreso (JSON)
+      </button>
+      <p style="font-size: 13px; color: var(--muted); text-align: center; margin-top: -8px;">
+        Descarga tu álbum para guardarlo o enviarlo.
+      </p>
+
+      <hr style="border: none; border-top: 1px solid var(--border); margin: 8px 0;">
+
+      <button class="sync-btn" onclick="triggerImport()">
+        <i class="fa-solid fa-file-import" style="color: var(--gold); font-size: 20px;"></i> 
+        Importar progreso (JSON)
+      </button>
+      <p style="font-size: 13px; color: var(--muted); text-align: center; margin-top: -8px;">
+        Carga un archivo previo para restaurar tu álbum.
+      </p>
+
+      <input type="file" id="importInput" accept=".json" style="display: none" onchange="handleImport(event)">
+      
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
-const KEY = 'panini_album_data';
+const KEY = 'panini_album_data'; // Mantén tu llave original aquí para no perder datos
 let albumData = [];
 let groups = [], countries = [];
 let filterGroup = 'Todos', filterCountry = 'Todos';
@@ -533,6 +582,8 @@ const toast          = $('toast');
 const waModal        = $('waModal');
 const waPreview      = $('waPreview');
 const waSubtitle     = $('waSubtitle');
+const syncModal      = $('syncModal');
+const importInput    = $('importInput');
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
@@ -637,7 +688,6 @@ function setView(mode) {
   ['viewAll','viewMiss','viewOwned'].forEach(id => $( id).classList.remove('active'));
   const map = { all:'viewAll', missing:'viewMiss', owned:'viewOwned' };
   $(map[mode]).classList.add('active');
-  // Toggle missing button style
   $('btnToggleMissing').classList.toggle('active', mode === 'missing');
   render();
 }
@@ -664,12 +714,10 @@ function render() {
     return matchSearch && matchGroup && matchCountry && matchView;
   });
 
-  // Section info
   const titles = { all: 'Todas las figuritas', missing: 'Figuritas que faltan', owned: 'Figuritas conseguidas' };
   $('sectionTitle').textContent = titles[viewMode];
   $('sectionCount').textContent = `${list.length} ${list.length === 1 ? 'resultado' : 'resultados'}`;
 
-  // Limit render for performance
   const LIMIT = 120;
   const shown = list.slice(0, LIMIT);
 
@@ -698,7 +746,6 @@ function render() {
       </div>
       <button class="btn-check" onclick="toggle(event,${ri})"><i class="fa-solid fa-check"></i></button>
     `;
-    // Tap card body to toggle (except controls)
     el.addEventListener('click', e => {
       if (e.target.closest('.btn-check') || e.target.closest('.repeat-ctrl')) return;
       toggle(e, ri);
@@ -753,7 +800,6 @@ function buildWAMessage() {
   const reps = albumData.filter(c => c.repetidas > 0);
   if (!reps.length) return '(sin repetidas)';
 
-  // Agrupar por grupo si la opción está activa
   let lines = [];
   lines.push('🌟 *Mis figuritas repetidas · Mundial 2026*');
   lines.push('');
@@ -791,15 +837,11 @@ function openWA() {
   waSubtitle.textContent = `${reps.length} figuritas · ${reps.reduce((s,c)=>s+c.repetidas,0)} unidades`;
   refreshWAPreview();
   waModal.classList.add('open');
-  // Close on backdrop click
-  waModal.onclick = e => { if (e.target === waModal) closeWA(); };
 }
 
 function closeWA() { waModal.classList.remove('open'); }
 
-function refreshWAPreview() {
-  waPreview.textContent = buildWAMessage();
-}
+function refreshWAPreview() { waPreview.textContent = buildWAMessage(); }
 
 window.toggleOpt = function(key) {
   waOpts[key] = !waOpts[key];
@@ -817,6 +859,74 @@ window.copyWA = function() {
   navigator.clipboard.writeText(buildWAMessage())
     .then(() => toast_('Copiado al portapapeles', 'ok'))
     .catch(() => toast_('Error al copiar', 'err'));
+};
+
+// ── SYNC: EXPORT / IMPORT ─────────────────────────────────────────────────────
+
+function openSync() {
+  syncModal.classList.add('open');
+}
+
+function closeSync() {
+  syncModal.classList.remove('open');
+}
+
+// Descargar archivo .json
+window.exportData = function() {
+  try {
+    const dataStr = JSON.stringify(albumData, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "mi_album_panini_backup.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast_('Álbum exportado correctamente', 'ok');
+    closeSync();
+  } catch (e) {
+    toast_('Error al exportar', 'err');
+  }
+};
+
+// Abrir selector de archivos
+window.triggerImport = function() {
+  importInput.click();
+};
+
+// Leer e inyectar el archivo .json
+window.handleImport = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const importedData = JSON.parse(e.target.result);
+      
+      // Validar superficialmente que es un array de tu álbum
+      if (Array.isArray(importedData) && importedData.length > 0 && importedData[0].hasOwnProperty('codigo')) {
+        albumData = importedData;
+        save();
+        extractMeta();
+        renderGroupFilters();
+        renderCountryFilters();
+        updateStats();
+        render();
+        toast_('Álbum importado con éxito', 'ok');
+        closeSync();
+      } else {
+        toast_('El archivo no tiene el formato correcto', 'err');
+      }
+    } catch (err) {
+      toast_('Error al leer el archivo JSON', 'err');
+    }
+    // Reiniciar input para permitir cargar el mismo archivo varias veces
+    importInput.value = '';
+  };
+  reader.readAsText(file);
 };
 
 init();
