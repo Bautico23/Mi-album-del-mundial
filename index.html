@@ -1,1 +1,954 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Mi Álbum · Mundial 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
+<style>
+/* ── Tokens ─────────────────────────────────────────────────────────────── */
+:root {
+  --navy:    #0b1120;
+  --navy2:   #111827;
+  --navy3:   #1a2540;
+  --navy4:   #243058;
+  --gold:    #f5c518;
+  --gold2:   #d4a017;
+  --teal:    #00c9a7;
+  --red:     #ef4444;
+  --text:    #e8edf5;
+  --muted:   #6b7a99;
+  --border:  #1e2d4a;
+  --card-bg: #131e35;
+  --card-on: #0f2044;
+  --radius:  12px;
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body:    'Barlow', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--navy);
+  color: var(--text);
+  font-family: var(--font-body);
+  min-height: 100dvh;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+.no-scroll::-webkit-scrollbar { display: none; }
+.no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+#header {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(11,17,32,0.92);
+  backdrop-filter: blur(16px) saturate(1.5);
+  border-bottom: 1px solid var(--border);
+}
+.header-top {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px 10px;
+}
+.logo {
+  display: flex; align-items: center; gap: 8px; flex: 1;
+}
+.logo-icon {
+  width: 36px; height: 36px; background: var(--gold);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.logo-icon i { color: var(--navy); font-size: 18px; }
+.logo-text { font-family: var(--font-display); font-weight: 900; font-size: 20px; letter-spacing: 0.5px; line-height: 1; }
+.logo-sub  { font-size: 10px; color: var(--gold); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+
+/* Search & Header Buttons */
+.search-wrap {
+  position: relative; flex: 1; max-width: 260px;
+}
+.search-wrap i {
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--muted); font-size: 13px; pointer-events: none;
+}
+#searchInput {
+  width: 100%; padding: 9px 12px 9px 34px;
+  background: var(--navy3); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-family: var(--font-body);
+  font-size: 14px; outline: none; transition: border-color .2s;
+}
+#searchInput::placeholder { color: var(--muted); }
+#searchInput:focus { border-color: var(--gold); }
+
+.header-btn {
+  width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--navy3); color: var(--text); display: flex; align-items: center;
+  justify-content: center; cursor: pointer; flex-shrink: 0; transition: all .15s;
+}
+.header-btn:active { transform: scale(.95); background: var(--navy4); }
+
+/* Stats bar */
+.stats-bar {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 0; border-top: 1px solid var(--border);
+}
+.stat-item {
+  padding: 8px 12px; display: flex; flex-direction: column;
+  align-items: center; gap: 1px;
+  border-right: 1px solid var(--border);
+}
+.stat-item:last-child { border-right: none; }
+.stat-val {
+  font-family: var(--font-display); font-size: 20px; font-weight: 900;
+  line-height: 1;
+}
+.stat-val.gold  { color: var(--gold); }
+.stat-val.teal  { color: var(--teal); }
+.stat-val.red   { color: #fb923c; }
+.stat-label { font-size: 9px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .8px; }
+
+/* Progress bar */
+.progress-wrap {
+  padding: 0 16px 8px; border-top: 1px solid var(--border); padding-top: 8px;
+}
+.progress-track {
+  height: 4px; background: var(--navy3); border-radius: 99px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; background: linear-gradient(90deg, var(--teal), var(--gold));
+  border-radius: 99px; transition: width .6s cubic-bezier(.4,0,.2,1);
+}
+.progress-labels {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: var(--muted); margin-top: 4px;
+}
+
+/* Filter tabs */
+.filter-row {
+  display: flex; gap: 6px; overflow-x: auto; padding: 8px 16px;
+  border-top: 1px solid var(--border);
+}
+.filter-row:empty { display: none; }
+.chip {
+  flex-shrink: 0; padding: 5px 12px; border-radius: 99px; font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: all .15s; white-space: nowrap;
+  border: 1.5px solid var(--border); background: transparent; color: var(--muted);
+  font-family: var(--font-body);
+}
+.chip:active { transform: scale(.95); }
+.chip.active-group   { background: var(--gold); color: var(--navy); border-color: var(--gold); }
+.chip.active-country { background: #1e3a8a; color: #93c5fd; border-color: #1d4ed8; }
+
+/* ── Main ───────────────────────────────────────────────────────────────── */
+main { padding: 16px; max-width: 640px; margin: 0 auto; }
+
+/* Section header */
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.section-title {
+  font-family: var(--font-display); font-size: 18px; font-weight: 700;
+  letter-spacing: .3px;
+}
+.section-count {
+  font-size: 12px; color: var(--muted); font-weight: 600;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+#cardsContainer { display: flex; flex-direction: column; gap: 8px; }
+
+.sticker-card {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: var(--radius); display: flex; align-items: center;
+  gap: 12px; padding: 12px 14px; cursor: pointer;
+  transition: transform .12s, border-color .15s, background .15s;
+  position: relative; overflow: hidden;
+}
+.sticker-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--border); border-radius: 3px 0 0 3px;
+  transition: background .15s;
+}
+.sticker-card:active { transform: scale(.98); }
+.sticker-card.owned {
+  background: var(--card-on); border-color: #1e3f7a;
+}
+.sticker-card.owned::before { background: var(--gold); }
+
+/* Badge code */
+.badge-code {
+  font-family: var(--font-display); font-weight: 900; font-size: 22px;
+  line-height: 1; color: var(--text); min-width: 44px; text-align: center;
+  flex-shrink: 0;
+}
+.sticker-card.owned .badge-code { color: var(--gold); }
+
+/* Card info */
+.card-info { flex: 1; min-width: 0; }
+.card-name {
+  font-size: 15px; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; line-height: 1.2;
+}
+.card-country {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 3px; font-size: 11px; color: var(--muted); font-weight: 500;
+}
+
+/* Check button */
+.btn-check {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--border); background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; cursor: pointer;
+}
+.btn-check i { color: var(--muted); font-size: 14px; transition: color .15s; }
+.sticker-card.owned .btn-check {
+  background: var(--gold); border-color: var(--gold);
+}
+.sticker-card.owned .btn-check i { color: var(--navy); }
+
+/* Repeat control */
+.repeat-ctrl {
+  display: flex; align-items: center; gap: 0;
+  background: var(--navy3); border: 1px solid var(--border);
+  border-radius: 8px; overflow: hidden; flex-shrink: 0;
+}
+.repeat-btn {
+  width: 30px; height: 30px; background: transparent; border: none;
+  color: var(--muted); cursor: pointer; display: flex; align-items: center;
+  justify-content: center; font-size: 12px; transition: background .1s;
+}
+.repeat-btn:active { background: var(--navy4); }
+.repeat-num {
+  font-family: var(--font-display); font-size: 17px; font-weight: 700;
+  min-width: 26px; text-align: center; color: #fb923c;
+  line-height: 1;
+}
+.repeat-num.zero { color: var(--muted); }
+
+/* ── Bottom Action Bar ──────────────────────────────────────────────────── */
+#actionBar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: rgba(11,17,32,0.95); backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border);
+  padding: 10px 20px calc(10px + env(safe-area-inset-bottom));
+  display: flex; gap: 10px; z-index: 50;
+}
+.action-btn {
+  flex: 1; padding: 12px 8px; border-radius: 10px; border: none;
+  font-family: var(--font-display); font-size: 15px; font-weight: 700;
+  letter-spacing: .3px; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; gap: 7px; transition: all .15s;
+}
+.action-btn:active { transform: scale(.96); }
+.btn-whatsapp {
+  background: #25d366; color: #fff;
+}
+.btn-whatsapp:disabled { background: var(--navy3); color: var(--muted); }
+.btn-missing {
+  background: var(--navy3); color: var(--text); border: 1.5px solid var(--border);
+}
+.btn-missing.active { background: var(--navy4); border-color: #3b82f6; color: #93c5fd; }
+
+/* ── Loading ────────────────────────────────────────────────────────────── */
+#loadingSection {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 60px 20px; gap: 16px;
+}
+.spinner {
+  width: 40px; height: 40px; border: 3px solid var(--border);
+  border-top-color: var(--gold); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center; padding: 48px 20px; color: var(--muted);
+}
+.empty-state i { font-size: 36px; margin-bottom: 12px; opacity: .4; }
+.empty-state p { font-size: 15px; }
+
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  padding: 10px 20px; border-radius: 99px; font-size: 13px; font-weight: 600;
+  white-space: nowrap; z-index: 200;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  transform: translateX(-50%) translateY(6px);
+}
+#toast.show {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+#toast.ok  { background: var(--teal); color: var(--navy); }
+#toast.err { background: var(--red); color: #fff; }
+#toast.info { background: var(--navy4); color: var(--text); border: 1px solid var(--border); }
+
+/* ── Modals (WhatsApp y Sync) ───────────────────────────────────────────── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(5,10,20,.85); backdrop-filter: blur(8px);
+  align-items: flex-end; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.wa-sheet {
+  background: var(--navy2); border-radius: 20px 20px 0 0;
+  border: 1px solid var(--border); border-bottom: none;
+  width: 100%; max-width: 640px; max-height: 85dvh;
+  display: flex; flex-direction: column;
+  animation: slideUp .28s cubic-bezier(.4,0,.2,1);
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+.wa-header {
+  padding: 20px 20px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.wa-title { font-family: var(--font-display); font-size: 22px; font-weight: 800; }
+.wa-title span { color: #25d366; }
+.wa-close {
+  width: 32px; height: 32px; background: var(--navy3); border: none;
+  border-radius: 50%; color: var(--muted); cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.wa-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+
+.wa-preview {
+  background: var(--navy3); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px; font-size: 13px; line-height: 1.6;
+  color: var(--text); white-space: pre-wrap; font-family: monospace;
+  max-height: 220px; overflow-y: auto; margin-bottom: 16px;
+}
+
+.wa-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.wa-opt-label {
+  font-size: 11px; color: var(--muted); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .7px; margin-bottom: 6px;
+}
+.wa-toggle-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.wa-toggle {
+  padding: 7px 14px; border-radius: 99px; font-size: 13px; font-weight: 600;
+  border: 1.5px solid var(--border); background: transparent; color: var(--muted);
+  cursor: pointer; transition: all .15s; font-family: var(--font-body);
+}
+.wa-toggle.on { background: #25d36622; border-color: #25d366; color: #25d366; }
+
+.wa-footer {
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border); display: flex; gap: 10px;
+}
+.wa-send {
+  flex: 1; padding: 14px; border-radius: 10px; border: none;
+  background: #25d366; color: #fff; font-family: var(--font-display);
+  font-size: 17px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background .15s;
+}
+.wa-send:active { background: #1fbd5c; }
+.wa-copy {
+  padding: 14px 18px; border-radius: 10px; border: 1.5px solid var(--border);
+  background: var(--navy3); color: var(--text); font-family: var(--font-display);
+  font-size: 15px; font-weight: 700; cursor: pointer; transition: background .15s;
+}
+.wa-copy:active { background: var(--navy4); }
+
+/* Sync Buttons */
+.sync-btn {
+  padding: 16px; border-radius: 12px; background: var(--navy3); border: 1.5px solid var(--border);
+  color: var(--text); font-family: var(--font-display); font-size: 18px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all .15s;
+}
+.sync-btn:active { transform: scale(0.96); background: var(--navy4); }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (min-width: 540px) {
+  .sticker-card { padding: 14px 18px; }
+  .badge-code { font-size: 26px; min-width: 52px; }
+  .card-name { font-size: 16px; }
+}
+
+/* Filter view toggle - Actualizado a 4 botones */
+.view-toggle {
+  display: flex; gap: 2px; background: var(--navy3);
+  border: 1px solid var(--border); border-radius: 8px; padding: 3px;
+}
+.view-btn {
+  padding: 5px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  border: none; background: transparent; color: var(--muted); cursor: pointer;
+  transition: all .15s; font-family: var(--font-body);
+}
+.view-btn.active { background: var(--navy4); color: var(--text); }
+
+/* Highlight match */
+mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding: 0 1px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="header-top">
+    <div class="logo">
+      <div class="logo-icon"><i class="fa-solid fa-star"></i></div>
+      <div>
+        <div class="logo-text">Mi Álbum</div>
+        <div class="logo-sub">Mundial 2026</div>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="text" id="searchInput" placeholder="Jugador o código..." autocomplete="off" autocorrect="off" spellcheck="false">
+    </div>
+    
+    <button class="header-btn" onclick="openSync()" title="Exportar o Importar">
+      <i class="fa-solid fa-arrows-rotate"></i>
+    </button>
+  </div>
+
+  <div class="stats-bar" id="statsBar" style="display:none">
+    <div class="stat-item">
+      <span class="stat-val gold" id="statGot">0</span>
+      <span class="stat-label">Conseguidas</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-val teal" id="statPct">0%</span>
+      <span class="stat-label">Completado</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-val red" id="statRep">0</span>
+      <span class="stat-label">Repetidas</span>
+    </div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap" style="display:none">
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="progress-labels">
+      <span id="progressLabel">0 de 0 figuritas</span>
+      <span id="progressMissing">0 faltan</span>
+    </div>
+  </div>
+
+  <div class="filter-row no-scroll" id="groupFilters"></div>
+  <div class="filter-row no-scroll" id="countryFilters" style="display:none"></div>
+</div>
+
+<main>
+  <div id="loadingSection">
+    <div class="spinner"></div>
+    <p style="color:var(--muted);font-size:14px">Cargando álbum…</p>
+  </div>
+
+  <div id="contentSection" style="display:none">
+    <div class="section-head">
+      <div>
+        <div class="section-title" id="sectionTitle">Todas las figuritas</div>
+        <div class="section-count" id="sectionCount"></div>
+      </div>
+      
+      <div class="view-toggle">
+        <button class="view-btn active" id="viewAll"   onclick="setView('all')">Todas</button>
+        <button class="view-btn"        id="viewMiss"  onclick="setView('missing')">Faltan</button>
+        <button class="view-btn"        id="viewOwned" onclick="setView('owned')">Tengo</button>
+        <button class="view-btn"        id="viewReps"  onclick="setView('reps')">Repes</button>
+      </div>
+    </div>
+
+    <div id="cardsContainer"></div>
+
+    <div id="emptyState" class="empty-state" style="display:none">
+      <i class="fa-solid fa-box-open"></i>
+      <p>No hay figuritas que coincidan</p>
+    </div>
+  </div>
+</main>
+
+<div id="actionBar" style="display:none">
+  <button class="action-btn btn-whatsapp" id="btnWA" onclick="openWA()">
+    <i class="fa-brands fa-whatsapp" style="font-size:18px"></i>
+    Compartir repetidas
+  </button>
+  <button class="action-btn btn-missing" id="btnToggleMissing" onclick="setView('missing')">
+    <i class="fa-solid fa-list-check"></i>
+    Me faltan
+  </button>
+</div>
+
+<div id="toast"></div>
+
+<div id="waModal" class="modal-overlay" onclick="if(event.target===this) closeWA();">
+  <div class="wa-sheet">
+    <div class="wa-header">
+      <div>
+        <div class="wa-title">Compartir por <span>WhatsApp</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px" id="waSubtitle"></div>
+      </div>
+      <button class="wa-close" onclick="closeWA()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="wa-body">
+      <div class="wa-options">
+        <div class="wa-opt-label">Incluir en el mensaje</div>
+        <div class="wa-toggle-row">
+          <button class="wa-toggle on" id="togCodes"   onclick="toggleOpt('codes')"  >Códigos</button>
+          <button class="wa-toggle on" id="togNames"   onclick="toggleOpt('names')"  >Nombres</button>
+          <button class="wa-toggle on" id="togCountry" onclick="toggleOpt('country')" >País</button>
+          <button class="wa-toggle"   id="togGroup"   onclick="toggleOpt('group')"   >Grupo</button>
+        </div>
+      </div>
+
+      <div class="wa-opt-label" style="margin-bottom:8px">Vista previa del mensaje</div>
+      <div class="wa-preview" id="waPreview"></div>
+    </div>
+
+    <div class="wa-footer">
+      <button class="wa-copy" onclick="copyWA()"><i class="fa-solid fa-copy"></i></button>
+      <button class="wa-send" onclick="sendWA()">
+        <i class="fa-brands fa-whatsapp" style="font-size:18px"></i>
+        Enviar por WhatsApp
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="syncModal" class="modal-overlay" onclick="if(event.target===this) closeSync();">
+  <div class="wa-sheet">
+    <div class="wa-header">
+      <div>
+        <div class="wa-title">Respaldo y <span style="color: var(--teal)">Sincronización</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Transfiere tu álbum a otro dispositivo</div>
+      </div>
+      <button class="wa-close" onclick="closeSync()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="wa-body" style="display: flex; flex-direction: column; gap: 16px; padding: 24px 20px;">
+      
+      <button class="sync-btn" onclick="exportData()">
+        <i class="fa-solid fa-file-export" style="color: var(--teal); font-size: 20px;"></i> 
+        Exportar progreso (JSON)
+      </button>
+      <p style="font-size: 13px; color: var(--muted); text-align: center; margin-top: -8px;">
+        Descarga tu álbum para guardarlo o enviarlo.
+      </p>
+
+      <hr style="border: none; border-top: 1px solid var(--border); margin: 8px 0;">
+
+      <button class="sync-btn" onclick="triggerImport()">
+        <i class="fa-solid fa-file-import" style="color: var(--gold); font-size: 20px;"></i> 
+        Importar progreso (JSON)
+      </button>
+      <p style="font-size: 13px; color: var(--muted); text-align: center; margin-top: -8px;">
+        Carga un archivo previo para restaurar tu álbum.
+      </p>
+
+      <input type="file" id="importInput" accept=".json" style="display: none" onchange="handleImport(event)">
+      
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+const KEY = 'panini_album_data'; // LLAVE ORIGINAL RESTAURADA
+let albumData = [];
+let groups = [], countries = [];
+let filterGroup = 'Todos', filterCountry = 'Todos';
+let viewMode = 'all'; // all | missing | owned | reps
+let searchTerm = '';
+let waOpts = { codes: true, names: true, country: true, group: false };
+
+// ── DOM ───────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const searchInput    = $('searchInput');
+const groupFilters   = $('groupFilters');
+const countryFilters = $('countryFilters');
+const cardsContainer = $('cardsContainer');
+const emptyState     = $('emptyState');
+const loadingSection = $('loadingSection');
+const contentSection = $('contentSection');
+const statsBar       = $('statsBar');
+const progressWrap   = $('progressWrap');
+const actionBar      = $('actionBar');
+const toast          = $('toast');
+const waModal        = $('waModal');
+const waPreview      = $('waPreview');
+const waSubtitle     = $('waSubtitle');
+const syncModal      = $('syncModal');
+const importInput    = $('importInput');
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  const stored = localStorage.getItem(KEY);
+  if (stored) {
+    albumData = JSON.parse(stored);
+    launch();
+    return;
+  }
+  try {
+    const r = await fetch('data.csv');
+    if (!r.ok) throw new Error();
+    Papa.parse(await r.text(), {
+      header: true, skipEmptyLines: true,
+      complete({ data }) {
+        albumData = data.map(row => ({
+          codigo:      (row['Código'] || '').trim(),
+          pais:        (row['Categoría / Pais'] || '').trim(),
+          descripcion: (row['Descripción'] || '').trim(),
+          enInventario: row['En Inventario']==='TRUE'||row['En Inventario']==='True',
+          repetidas:   parseInt(row['Repetidas']) || 0,
+          grupo:       (row['Grupos'] || 'Otros').trim()
+        }));
+        save(); launch();
+      }
+    });
+  } catch {
+    loadingSection.innerHTML = '<p style="color:#ef4444;font-weight:600;text-align:center">Error al leer data.csv</p>';
+  }
+}
+
+function launch() {
+  loadingSection.style.display = 'none';
+  contentSection.style.display = 'block';
+  statsBar.style.display       = 'grid';
+  progressWrap.style.display   = 'block';
+  actionBar.style.display      = 'flex';
+  extractMeta();
+  renderGroupFilters();
+  render();
+  updateStats();
+}
+
+function extractMeta() {
+  groups = ['Todos', ...new Set(albumData.map(i => i.grupo).filter(Boolean))];
+}
+function extractCountries() {
+  const src = filterGroup !== 'Todos' ? albumData.filter(i => i.grupo === filterGroup) : albumData;
+  countries = ['Todos', ...new Set(src.map(i => i.pais).filter(Boolean))];
+  if (!countries.includes(filterCountry)) filterCountry = 'Todos';
+}
+
+function save() { localStorage.setItem(KEY, JSON.stringify(albumData)); }
+
+// ── Stats ────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const got  = albumData.filter(c => c.enInventario).length;
+  const rep  = albumData.reduce((s,c) => s + c.repetidas, 0);
+  const pct  = albumData.length ? Math.round(got / albumData.length * 100) : 0;
+  const miss = albumData.length - got;
+  $('statGot').textContent  = got;
+  $('statPct').textContent  = pct + '%';
+  $('statRep').textContent  = rep;
+  $('progressFill').style.width = pct + '%';
+  $('progressLabel').textContent = `${got} de ${albumData.length} figuritas`;
+  $('progressMissing').textContent = `${miss} faltan`;
+
+  // WA button state
+  const hasRep = albumData.some(c => c.repetidas > 0);
+  $('btnWA').disabled = !hasRep;
+}
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+function renderGroupFilters() {
+  groupFilters.innerHTML = '';
+  groups.forEach(g => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (filterGroup === g ? ' active-group' : '');
+    b.textContent = g;
+    b.onclick = () => { filterGroup = g; filterCountry = 'Todos'; renderGroupFilters(); extractCountries(); renderCountryFilters(); render(); };
+    groupFilters.appendChild(b);
+  });
+}
+function renderCountryFilters() {
+  extractCountries();
+  const show = filterGroup !== 'Todos' && countries.length > 2;
+  countryFilters.style.display = show ? 'flex' : 'none';
+  countryFilters.innerHTML = '';
+  if (!show) return;
+  countries.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (filterCountry === p ? ' active-country' : '');
+    b.textContent = p;
+    b.onclick = () => { filterCountry = p; renderCountryFilters(); render(); };
+    countryFilters.appendChild(b);
+  });
+}
+
+// ── View mode ─────────────────────────────────────────────────────────────────
+function setView(mode) {
+  viewMode = mode;
+  ['viewAll','viewMiss','viewOwned','viewReps'].forEach(id => $(id).classList.remove('active'));
+  const map = { all:'viewAll', missing:'viewMiss', owned:'viewOwned', reps:'viewReps' };
+  $(map[mode]).classList.add('active');
+  $('btnToggleMissing').classList.toggle('active', mode === 'missing');
+  render();
+}
+
+// ── Normalise ─────────────────────────────────────────────────────────────────
+function norm(t) { return t ? t.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase() : ''; }
+
+function highlight(text, term) {
+  if (!term) return text;
+  const nt = norm(text), idx = nt.indexOf(term);
+  if (idx < 0) return text;
+  return text.slice(0, idx) + '<mark>' + text.slice(idx, idx + term.length) + '</mark>' + text.slice(idx + term.length);
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  const term = norm(searchTerm);
+  
+  // Limpiamos los guiones y espacios de la búsqueda para hacer coincidencias flexibles (Ej. ARG10 == ARG-10)
+  const termNoHyphen = term.replace(/[-\s]/g, '');
+
+  let list = albumData.filter(c => {
+    const descNorm = norm(c.descripcion);
+    const codeNorm = norm(c.codigo);
+    const codeClean = codeNorm.replace(/-/g, '');
+    const paisNorm = norm(c.pais);
+
+    // NUEVO BUSCADOR FLEXIBLE (Ignora guiones al buscar códigos)
+    const matchSearch = !term || descNorm.includes(term) || codeClean.includes(termNoHyphen) || paisNorm.includes(term);
+    
+    // Si estás buscando con la lupa, ignora los filtros de grupos y países para que busque en todo el álbum.
+    const matchGroup   = term ? true : (filterGroup === 'Todos' || c.grupo === filterGroup);
+    const matchCountry = term ? true : (filterCountry === 'Todos' || c.pais === filterCountry);
+    
+    // Nueva vista para repetidas
+    const matchView = viewMode === 'all' || 
+                     (viewMode === 'owned' && c.enInventario) || 
+                     (viewMode === 'missing' && !c.enInventario) || 
+                     (viewMode === 'reps' && c.repetidas > 0);
+                     
+    return matchSearch && matchGroup && matchCountry && matchView;
+  });
+
+  const titles = { all: 'Todas las figuritas', missing: 'Figuritas que faltan', owned: 'Figuritas conseguidas', reps: 'Figuritas repetidas' };
+  $('sectionTitle').textContent = titles[viewMode];
+  $('sectionCount').textContent = `${list.length} ${list.length === 1 ? 'resultado' : 'resultados'}`;
+
+  const LIMIT = 120;
+  const shown = list.slice(0, LIMIT);
+
+  cardsContainer.innerHTML = '';
+  emptyState.style.display = shown.length ? 'none' : 'block';
+
+  shown.forEach(card => {
+    const ri = albumData.findIndex(c => c.codigo === card.codigo);
+    const el = document.createElement('div');
+    el.className = 'sticker-card' + (card.enInventario ? ' owned' : '');
+
+    const nameHL    = highlight(card.descripcion, term);
+    const codeHL    = highlight(card.codigo, term);
+    const countryHL = highlight(card.pais, term);
+
+    el.innerHTML = `
+      <div class="badge-code">${codeHL}</div>
+      <div class="card-info">
+        <div class="card-name">${nameHL}</div>
+        <div class="card-country"><i class="fa-solid fa-location-dot" style="font-size:9px"></i>${countryHL}</div>
+      </div>
+      <div class="repeat-ctrl">
+        <button class="repeat-btn" onclick="changeRep(event,${ri},-1)"><i class="fa-solid fa-minus"></i></button>
+        <span class="repeat-num${card.repetidas===0?' zero':''}">${card.repetidas}</span>
+        <button class="repeat-btn" onclick="changeRep(event,${ri},1)"><i class="fa-solid fa-plus"></i></button>
+      </div>
+      <button class="btn-check" onclick="toggle(event,${ri})"><i class="fa-solid fa-check"></i></button>
+    `;
+    el.addEventListener('click', e => {
+      if (e.target.closest('.btn-check') || e.target.closest('.repeat-ctrl')) return;
+      toggle(e, ri);
+    });
+    cardsContainer.appendChild(el);
+  });
+
+  if (list.length > LIMIT) {
+    const more = document.createElement('p');
+    more.style.cssText = 'text-align:center;font-size:13px;color:var(--muted);padding:16px 0';
+    more.textContent = `Mostrando ${LIMIT} de ${list.length}. Usa el buscador para filtrar más.`;
+    cardsContainer.appendChild(more);
+  }
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+window.toggle = function(e, i) {
+  e.stopPropagation();
+  albumData[i].enInventario = !albumData[i].enInventario;
+  if (!albumData[i].enInventario) albumData[i].repetidas = 0;
+  save(); updateStats(); render();
+  toast_(albumData[i].enInventario ? `✓ ${albumData[i].descripcion}` : `Quitada: ${albumData[i].descripcion}`, albumData[i].enInventario ? 'ok' : 'info');
+};
+
+window.changeRep = function(e, i, delta) {
+  e.stopPropagation();
+  let v = albumData[i].repetidas + delta;
+  if (v < 0) v = 0;
+  if (v > 0 && !albumData[i].enInventario) albumData[i].enInventario = true;
+  albumData[i].repetidas = v;
+  save(); updateStats(); render();
+};
+
+// ── Search ────────────────────────────────────────────────────────────────────
+let searchTimer;
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { searchTerm = searchInput.value; render(); }, 180);
+});
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast_(msg, type='ok') {
+  toast.textContent = msg;
+  toast.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
+}
+
+// ── WhatsApp ──────────────────────────────────────────────────────────────────
+function buildWAMessage() {
+  const reps = albumData.filter(c => c.repetidas > 0);
+  if (!reps.length) return '(sin repetidas)';
+
+  let lines = [];
+  lines.push('🌟 *Mis figuritas repetidas · Mundial 2026*');
+  lines.push('');
+
+  if (waOpts.group) {
+    const byGroup = {};
+    reps.forEach(c => { if (!byGroup[c.grupo]) byGroup[c.grupo] = []; byGroup[c.grupo].push(c); });
+    Object.entries(byGroup).forEach(([g, cards]) => {
+      lines.push(`📁 *${g}*`);
+      cards.forEach(c => lines.push(buildLine(c)));
+      lines.push('');
+    });
+  } else {
+    reps.forEach(c => lines.push(buildLine(c)));
+    lines.push('');
+  }
+
+  lines.push(`_Total: ${reps.reduce((s,c)=>s+c.repetidas,0)} repetidas en ${reps.length} figuritas_`);
+  lines.push('¿Cambiamos? 🤝');
+  return lines.join('\n');
+}
+
+function buildLine(c) {
+  let parts = [];
+  if (waOpts.codes)   parts.push(`[${c.codigo}]`);
+  if (waOpts.names)   parts.push(c.descripcion);
+  if (waOpts.country) parts.push(`(${c.pais})`);
+  parts.push(`×${c.repetidas}`);
+  return parts.join(' ');
+}
+
+function openWA() {
+  const reps = albumData.filter(c => c.repetidas > 0);
+  if (!reps.length) { toast_('No tienes figuritas repetidas', 'info'); return; }
+  waSubtitle.textContent = `${reps.length} figuritas · ${reps.reduce((s,c)=>s+c.repetidas,0)} unidades`;
+  refreshWAPreview();
+  waModal.classList.add('open');
+}
+
+function closeWA() { waModal.classList.remove('open'); }
+
+function refreshWAPreview() { waPreview.textContent = buildWAMessage(); }
+
+window.toggleOpt = function(key) {
+  waOpts[key] = !waOpts[key];
+  $('tog' + key.charAt(0).toUpperCase() + key.slice(1)).classList.toggle('on', waOpts[key]);
+  refreshWAPreview();
+};
+
+window.sendWA = function() {
+  const msg = buildWAMessage();
+  const url = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+};
+
+window.copyWA = function() {
+  navigator.clipboard.writeText(buildWAMessage())
+    .then(() => toast_('Copiado al portapapeles', 'ok'))
+    .catch(() => toast_('Error al copiar', 'err'));
+};
+
+// ── SYNC: EXPORT / IMPORT ─────────────────────────────────────────────────────
+
+function openSync() {
+  syncModal.classList.add('open');
+}
+
+function closeSync() {
+  syncModal.classList.remove('open');
+}
+
+// Descargar archivo .json
+window.exportData = function() {
+  try {
+    const dataStr = JSON.stringify(albumData, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "mi_album_panini_backup.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast_('Álbum exportado correctamente', 'ok');
+    closeSync();
+  } catch (e) {
+    toast_('Error al exportar', 'err');
+  }
+};
+
+// Abrir selector de archivos
+window.triggerImport = function() {
+  importInput.click();
+};
+
+// Leer e inyectar el archivo .json
+window.handleImport = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const importedData = JSON.parse(e.target.result);
+      
+      // Validar superficialmente que es un array de tu álbum
+      if (Array.isArray(importedData) && importedData.length > 0 && importedData[0].hasOwnProperty('codigo')) {
+        albumData = importedData;
+        save();
+        extractMeta();
+        renderGroupFilters();
+        renderCountryFilters();
+        updateStats();
+        render();
+        toast_('Álbum importado con éxito', 'ok');
+        closeSync();
+      } else {
+        toast_('El archivo no tiene el formato correcto', 'err');
+      }
+    } catch (err) {
+      toast_('Error al leer el archivo JSON', 'err');
+    }
+    // Reiniciar input para permitir cargar el mismo archivo varias veces
+    importInput.value = '';
+  };
+  reader.readAsText(file);
+};
+
+init();
+</script>
+</body>
+</html>
