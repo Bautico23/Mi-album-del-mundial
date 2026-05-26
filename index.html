@@ -155,8 +155,6 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 .section-head {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 12px;
-  flex-wrap: wrap;
-  gap: 10px;
 }
 .section-title {
   font-family: var(--font-display); font-size: 18px; font-weight: 700;
@@ -382,13 +380,13 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
   .card-name { font-size: 16px; }
 }
 
-/* Filter view toggle */
+/* Filter view toggle - Actualizado a 4 botones */
 .view-toggle {
-  display: flex; gap: 4px; background: var(--navy3);
+  display: flex; gap: 2px; background: var(--navy3);
   border: 1px solid var(--border); border-radius: 8px; padding: 3px;
 }
 .view-btn {
-  padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  padding: 5px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
   border: none; background: transparent; color: var(--muted); cursor: pointer;
   transition: all .15s; font-family: var(--font-body);
 }
@@ -411,7 +409,7 @@ mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding:
     </div>
     <div class="search-wrap">
       <i class="fa-solid fa-magnifying-glass"></i>
-      <input type="text" id="searchInput" placeholder="Jugador, código…" autocomplete="off" autocorrect="off" spellcheck="false">
+      <input type="text" id="searchInput" placeholder="Jugador o código..." autocomplete="off" autocorrect="off" spellcheck="false">
     </div>
     
     <button class="header-btn" onclick="openSync()" title="Exportar o Importar">
@@ -458,11 +456,12 @@ mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding:
         <div class="section-title" id="sectionTitle">Todas las figuritas</div>
         <div class="section-count" id="sectionCount"></div>
       </div>
+      
       <div class="view-toggle">
         <button class="view-btn active" id="viewAll"   onclick="setView('all')">Todas</button>
         <button class="view-btn"        id="viewMiss"  onclick="setView('missing')">Faltan</button>
         <button class="view-btn"        id="viewOwned" onclick="setView('owned')">Tengo</button>
-        <button class="view-btn"        id="viewRep"   onclick="setView('repeated')">Repes</button>
+        <button class="view-btn"        id="viewReps"  onclick="setView('reps')">Repes</button>
       </div>
     </div>
 
@@ -534,6 +533,7 @@ mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding:
     </div>
 
     <div class="wa-body" style="display: flex; flex-direction: column; gap: 16px; padding: 24px 20px;">
+      
       <button class="sync-btn" onclick="exportData()">
         <i class="fa-solid fa-file-export" style="color: var(--teal); font-size: 20px;"></i> 
         Exportar progreso (JSON)
@@ -553,17 +553,18 @@ mark { background: var(--gold); color: var(--navy); border-radius: 2px; padding:
       </p>
 
       <input type="file" id="importInput" accept=".json" style="display: none" onchange="handleImport(event)">
+      
     </div>
   </div>
 </div>
 
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
-const KEY = 'panini_album_data';
+const KEY = 'panini_album_data'; // LLAVE ORIGINAL RESTAURADA
 let albumData = [];
 let groups = [], countries = [];
 let filterGroup = 'Todos', filterCountry = 'Todos';
-let viewMode = 'all'; // all | missing | owned | repeated
+let viewMode = 'all'; // all | missing | owned | reps
 let searchTerm = '';
 let waOpts = { codes: true, names: true, country: true, group: false };
 
@@ -652,6 +653,7 @@ function updateStats() {
   $('progressLabel').textContent = `${got} de ${albumData.length} figuritas`;
   $('progressMissing').textContent = `${miss} faltan`;
 
+  // WA button state
   const hasRep = albumData.some(c => c.repetidas > 0);
   $('btnWA').disabled = !hasRep;
 }
@@ -685,8 +687,8 @@ function renderCountryFilters() {
 // ── View mode ─────────────────────────────────────────────────────────────────
 function setView(mode) {
   viewMode = mode;
-  ['viewAll','viewMiss','viewOwned', 'viewRep'].forEach(id => $(id).classList.remove('active'));
-  const map = { all:'viewAll', missing:'viewMiss', owned:'viewOwned', repeated:'viewRep' };
+  ['viewAll','viewMiss','viewOwned','viewReps'].forEach(id => $(id).classList.remove('active'));
+  const map = { all:'viewAll', missing:'viewMiss', owned:'viewOwned', reps:'viewReps' };
   $(map[mode]).classList.add('active');
   $('btnToggleMissing').classList.toggle('active', mode === 'missing');
   render();
@@ -706,31 +708,32 @@ function highlight(text, term) {
 function render() {
   const term = norm(searchTerm);
   
-  // MODIFICACIÓN 3: Preparamos el término de búsqueda quitándole también espacios y guiones para la comparación de códigos
+  // Limpiamos los guiones y espacios de la búsqueda para hacer coincidencias flexibles (Ej. ARG10 == ARG-10)
   const termNoHyphen = term.replace(/[-\s]/g, '');
 
   let list = albumData.filter(c => {
-    const desc = norm(c.descripcion);
-    const cod = norm(c.codigo);
-    const codNoHyphen = cod.replace(/-/g, ''); // Para buscar "ARG10" en "ARG-10"
-    const pais = norm(c.pais);
+    const descNorm = norm(c.descripcion);
+    const codeNorm = norm(c.codigo);
+    const codeClean = codeNorm.replace(/-/g, '');
+    const paisNorm = norm(c.pais);
 
-    const matchSearch = !term || desc.includes(term) || codNoHyphen.includes(termNoHyphen) || pais.includes(term);
+    // NUEVO BUSCADOR FLEXIBLE (Ignora guiones al buscar códigos)
+    const matchSearch = !term || descNorm.includes(term) || codeClean.includes(termNoHyphen) || paisNorm.includes(term);
     
-    // MODIFICACIÓN 2: Si el usuario está buscando algo (term existe), ignoramos los filtros de grupo y país
-    const matchGroup  = term ? true : (filterGroup === 'Todos' || c.grupo === filterGroup);
+    // Si estás buscando con la lupa, ignora los filtros de grupos y países para que busque en todo el álbum.
+    const matchGroup   = term ? true : (filterGroup === 'Todos' || c.grupo === filterGroup);
     const matchCountry = term ? true : (filterCountry === 'Todos' || c.pais === filterCountry);
     
-    // MODIFICACIÓN 1: Añadida lógica para ver repetidas
-    const matchView   = viewMode === 'all' 
-                        || (viewMode === 'owned' && c.enInventario) 
-                        || (viewMode === 'missing' && !c.enInventario)
-                        || (viewMode === 'repeated' && c.repetidas > 0);
-                        
+    // Nueva vista para repetidas
+    const matchView = viewMode === 'all' || 
+                     (viewMode === 'owned' && c.enInventario) || 
+                     (viewMode === 'missing' && !c.enInventario) || 
+                     (viewMode === 'reps' && c.repetidas > 0);
+                     
     return matchSearch && matchGroup && matchCountry && matchView;
   });
 
-  const titles = { all: 'Todas las figuritas', missing: 'Figuritas que faltan', owned: 'Figuritas conseguidas', repeated: 'Figuritas repetidas' };
+  const titles = { all: 'Todas las figuritas', missing: 'Figuritas que faltan', owned: 'Figuritas conseguidas', reps: 'Figuritas repetidas' };
   $('sectionTitle').textContent = titles[viewMode];
   $('sectionCount').textContent = `${list.length} ${list.length === 1 ? 'resultado' : 'resultados'}`;
 
@@ -887,6 +890,7 @@ function closeSync() {
   syncModal.classList.remove('open');
 }
 
+// Descargar archivo .json
 window.exportData = function() {
   try {
     const dataStr = JSON.stringify(albumData, null, 2);
@@ -906,10 +910,12 @@ window.exportData = function() {
   }
 };
 
+// Abrir selector de archivos
 window.triggerImport = function() {
   importInput.click();
 };
 
+// Leer e inyectar el archivo .json
 window.handleImport = function(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -919,6 +925,7 @@ window.handleImport = function(event) {
     try {
       const importedData = JSON.parse(e.target.result);
       
+      // Validar superficialmente que es un array de tu álbum
       if (Array.isArray(importedData) && importedData.length > 0 && importedData[0].hasOwnProperty('codigo')) {
         albumData = importedData;
         save();
@@ -935,6 +942,7 @@ window.handleImport = function(event) {
     } catch (err) {
       toast_('Error al leer el archivo JSON', 'err');
     }
+    // Reiniciar input para permitir cargar el mismo archivo varias veces
     importInput.value = '';
   };
   reader.readAsText(file);
